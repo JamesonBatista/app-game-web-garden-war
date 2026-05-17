@@ -1,15 +1,14 @@
-# Survivors Quest (modular para GitHub Pages)
+# Survivors Quest (3D para GitHub Pages)
 
-Jogo roguelite inspirado em Vampire Survivors com visual isometrico em Phaser 3.
-Agora com um modulo ARPG estilo Diablo:
+Jogo ARPG Survivors em 3D (camera estilo Diablo) rodando 100% no browser com Three.js.
+Recursos implementados:
 
 - selecao de classe (Barbaro, Feiticeiro, Ladino)
-- atributos de combate mais realistas (armadura, resistencia, critico, esquiva)
+- personagem 3D animado (GLB) e inimigos 3D (GLB)
+- atributos de combate (armadura, critico, esquiva, recurso)
 - recurso de classe (Furia, Mana, Energia)
 - habilidade ativa exclusiva por classe
-- loot com raridade e afixos que melhora o personagem durante a run
-- drops de itens no chao com clique/toque para equipar
-- painel de equipamento (arma, armadura, reliquia)
+- loot/progressao que aumenta poder durante a run
 - inimigos elite e mini-boss com afixos perigosos
 - VFX reforcado nas habilidades (impacto, trilha, anel de energia, explosao)
 - feedback premium de combate (hit-stop, flash de impacto, camada cinematica, sombras dinamicas)
@@ -18,22 +17,16 @@ Agora com um modulo ARPG estilo Diablo:
 
 ## Dependencias em runtime
 
-- Phaser 3.60.0 versionado localmente em `vendor/phaser/phaser.min.js`
+- Three.js versionado localmente em `vendor/three/`
+- loaders locais em `vendor/three/addons/`
 - Nenhuma dependencia externa via CDN para executar o jogo
 
 ## Assets visuais (personagens)
 
-O jogo usa sprites locais em `assets/sprites/` para player e inimigos, com fallback interno caso algum arquivo nao carregue.
+O jogo usa modelos 3D locais em `assets/models/`:
 
-Pack principal consistente:
-
-- `assets/sprites/player/notlink_down.png`
-- `assets/sprites/player/notlink_side.png`
-- `assets/sprites/player/notlink_use.png`
-- `assets/sprites/enemies/sword_beast_side.png`
-- `assets/sprites/enemies/goo_walk.png`
-- `assets/sprites/enemies/giant_walk.png`
-- `assets/sprites/effects/whelp_fire.png`
+- `assets/models/player.glb`
+- `assets/models/enemy.glb`
 
 Creditos completos em `assets/CREDITS.md`.
 
@@ -43,11 +36,24 @@ Creditos completos em `assets/CREDITS.md`.
 .
 ├── index.html
 ├── vendor/
-│   └── phaser/
-│       └── phaser.min.js
+│   ├── phaser/
+│   │   └── phaser.min.js
+│   └── three/
+│       ├── three.module.js
+│       └── addons/
+│           ├── loaders/
+│           │   └── GLTFLoader.js
+│           └── utils/
+│               └── SkeletonUtils.js
+├── assets/
+│   ├── models/
+│   │   ├── player.glb
+│   │   └── enemy.glb
+│   └── CREDITS.md
 ├── styles/
 │   └── main.css
 └── src/
+    ├── game3d.js
     ├── main.js
     ├── constants.js
     ├── state.js

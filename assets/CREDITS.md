@@ -1,6 +1,13 @@
-## Fontes dos sprites usados
+## Fontes dos assets visuais usados
 
 Arquivos baixados e versionados localmente para uso no jogo:
+
+### Modelos 3D (runtime atual)
+
+- `assets/models/player.glb`
+  - Fonte: https://threejs.org/examples/models/gltf/Soldier.glb
+- `assets/models/enemy.glb`
+  - Fonte: https://threejs.org/examples/models/gltf/RobotExpressive/RobotExpressive.glb
 
 ### Pack principal (estilo consistente)
 

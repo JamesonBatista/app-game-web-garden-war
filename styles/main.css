@@ -22,9 +22,191 @@ body {
 #game-container {
   width: 100%;
   height: 100%;
+  position: fixed;
+  inset: 0;
 }
 
 #game-container canvas {
   display: block;
   margin: 0 auto;
+}
+
+#ui-root {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  color: #ecf0f1;
+  font-family: "Segoe UI", Arial, sans-serif;
+}
+
+.hud-panel {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  right: 10px;
+  background: rgba(8, 10, 15, 0.62);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
+  padding: 10px 12px;
+  backdrop-filter: blur(5px);
+  pointer-events: none;
+}
+
+.bar-wrap {
+  margin-bottom: 6px;
+}
+
+.bar-label {
+  font-size: 11px;
+  margin-bottom: 2px;
+  color: #cfd8dc;
+}
+
+.bar-bg {
+  width: 100%;
+  height: 10px;
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.bar-fill {
+  height: 100%;
+  border-radius: 999px;
+  transition: width 0.12s linear;
+}
+
+.stats-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  font-size: 12px;
+  color: #ecf0f1;
+}
+
+.boss-panel {
+  position: absolute;
+  top: 132px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: min(540px, calc(100vw - 24px));
+  background: rgba(15, 15, 20, 0.7);
+  border: 1px solid rgba(231, 76, 60, 0.45);
+  border-radius: 8px;
+  padding: 6px 8px;
+  display: none;
+}
+
+.boss-title {
+  text-align: center;
+  font-size: 12px;
+  margin-bottom: 4px;
+  color: #ffd9d6;
+}
+
+.overlay-center {
+  position: absolute;
+  inset: 0;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  pointer-events: auto;
+  background: rgba(0, 0, 0, 0.45);
+}
+
+.card-modal {
+  width: min(700px, calc(100vw - 28px));
+  max-height: calc(100vh - 30px);
+  overflow: auto;
+  background: #10131b;
+  border: 1px solid rgba(255, 255, 255, 0.13);
+  border-radius: 14px;
+  padding: 14px;
+}
+
+.card-title {
+  font-size: 24px;
+  font-weight: 800;
+  text-align: center;
+  margin-bottom: 10px;
+  color: #f1c40f;
+}
+
+.class-grid,
+.upgrade-grid {
+  display: grid;
+  gap: 10px;
+}
+
+.class-grid {
+  grid-template-columns: repeat(1, minmax(0, 1fr));
+}
+
+.upgrade-grid {
+  grid-template-columns: repeat(1, minmax(0, 1fr));
+}
+
+.select-card,
+.upgrade-card {
+  background: #161b28;
+  border: 1px solid rgba(255, 255, 255, 0.13);
+  border-radius: 10px;
+  padding: 10px;
+  cursor: pointer;
+  color: #f1f5f9;
+}
+
+.select-card:hover,
+.upgrade-card:hover {
+  border-color: #f1c40f;
+  transform: translateY(-1px);
+}
+
+.card-name {
+  font-weight: 700;
+  margin-bottom: 4px;
+}
+
+.card-desc {
+  font-size: 12px;
+  color: #bdc3c7;
+}
+
+.joystick-zone {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 55vw;
+  height: 46vh;
+  pointer-events: auto;
+  touch-action: none;
+}
+
+.joystick-base,
+.joystick-thumb {
+  position: absolute;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+}
+
+.joystick-base {
+  width: 90px;
+  height: 90px;
+  background: rgba(255, 255, 255, 0.13);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+.joystick-thumb {
+  width: 42px;
+  height: 42px;
+  background: rgba(255, 255, 255, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.33);
+}
+
+.vignette-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  box-shadow: inset 0 0 140px rgba(0, 0, 0, 0.72);
 }

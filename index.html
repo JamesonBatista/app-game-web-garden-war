@@ -4,11 +4,19 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
   <title>Survivors Quest</title>
-  <script src="./vendor/phaser/phaser.min.js"></script>
   <link rel="stylesheet" href="./styles/main.css">
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "./vendor/three/three.module.js",
+      "three/addons/": "./vendor/three/addons/"
+    }
+  }
+  </script>
 </head>
 <body>
   <div id="game-container"></div>
-  <script type="module" src="./src/main.js"></script>
+  <div id="ui-root"></div>
+  <script type="module" src="./src/game3d.js"></script>
 </body>
 </html>
