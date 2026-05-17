@@ -28,6 +28,8 @@ export default class GameScene extends Phaser.Scene {
     applyClassPreset(this.gs, this.selectedClassId);
     this.classSkillTree = getClassSkillTree(this.gs.player.classId);
     this.hasBossAlive = false;
+    this.hitStopRemaining = 0;
+    this.lastImpactTime = 0;
     this.createIsoMap();
     this.createPlayer();
     this.applyClassVisualStyle();
@@ -35,6 +37,7 @@ export default class GameScene extends Phaser.Scene {
     this.createCollisions();
     this.createCamera();
     this.createHUD();
+    this.createCinematicFX();
     this.createJoystick();
     this.createKeyboard();
     this.startBGM();
@@ -45,6 +48,13 @@ export default class GameScene extends Phaser.Scene {
 
   update(_time, delta) {
     if (!this.gs.running || this.gs.paused) {
+      this.updateScreenFX(delta);
+      return;
+    }
+
+    if (this.hitStopRemaining > 0) {
+      this.hitStopRemaining -= delta;
+      this.updateScreenFX(delta);
       return;
     }
 
@@ -59,6 +69,7 @@ export default class GameScene extends Phaser.Scene {
     this.updateLootDrops(delta);
     this.recycleTiles();
     this.updateHUD();
+    this.updateScreenFX(delta);
   }
 
   createIsoMap() {
@@ -171,6 +182,68 @@ export default class GameScene extends Phaser.Scene {
     };
   }
 
+  createCinematicFX() {
+    const { width, height } = this.scale;
+    const sf = (obj, depth = 11000) => obj.setScrollFactor(0).setDepth(depth);
+
+    if (!this.textures.exists("ui-vignette")) {
+      const g = this.make.graphics({ x: 0, y: 0, add: false });
+      g.fillStyle(0x000000, 0.08);
+      g.fillRect(0, 0, width, height);
+      for (let i = 0; i < 14; i += 1) {
+        const alpha = 0.025 + i * 0.012;
+        g.lineStyle(22, 0x000000, alpha);
+        g.strokeRect(10 + i * 7, 10 + i * 7, width - (20 + i * 14), height - (20 + i * 14));
+      }
+      g.generateTexture("ui-vignette", width, height);
+      g.destroy();
+    }
+
+    this.vignetteOverlay = sf(this.add.image(width / 2, height / 2, "ui-vignette"), 9989).setAlpha(0.52);
+    this.damageOverlay = sf(this.add.rectangle(width / 2, height / 2, width, height, 0xe74c3c, 0), 10996);
+    this.flashOverlay = sf(this.add.rectangle(width / 2, height / 2, width, height, 0xffffff, 0), 10997);
+    this.darkPulseOverlay = sf(this.add.rectangle(width / 2, height / 2, width, height, 0x1b2631, 0), 10994);
+  }
+
+  updateScreenFX(delta) {
+    if (!this.vignetteOverlay) {
+      return;
+    }
+
+    const lowHpFactor = 1 - Phaser.Math.Clamp(this.gs.player.hp / this.gs.player.maxHp, 0, 1);
+    const pulse = Math.sin(this.gs.elapsed / 420) * 0.02;
+    this.vignetteOverlay.setAlpha(0.48 + pulse + lowHpFactor * 0.18);
+
+    if (this.damageOverlay.alpha > 0.001) {
+      this.damageOverlay.setAlpha(Math.max(0, this.damageOverlay.alpha - delta * 0.0025));
+    }
+    if (this.flashOverlay.alpha > 0.001) {
+      this.flashOverlay.setAlpha(Math.max(0, this.flashOverlay.alpha - delta * 0.004));
+    }
+    if (this.darkPulseOverlay.alpha > 0.001) {
+      this.darkPulseOverlay.setAlpha(Math.max(0, this.darkPulseOverlay.alpha - delta * 0.002));
+    }
+  }
+
+  requestHitStop(ms) {
+    if (ms <= 14 && this.gs.elapsed - this.lastImpactTime < 45) {
+      return;
+    }
+    this.lastImpactTime = this.gs.elapsed;
+    this.hitStopRemaining = Math.max(this.hitStopRemaining, ms);
+  }
+
+  triggerDamageFlash(amount) {
+    const boost = Phaser.Math.Clamp(amount / 65, 0.08, 0.3);
+    this.damageOverlay.setAlpha(Math.max(this.damageOverlay.alpha, boost));
+    this.darkPulseOverlay.setAlpha(Math.max(this.darkPulseOverlay.alpha, boost * 0.36));
+  }
+
+  triggerImpactFlash(strong = false) {
+    const alpha = strong ? 0.2 : 0.12;
+    this.flashOverlay.setAlpha(Math.max(this.flashOverlay.alpha, alpha));
+  }
+
   createGroups() {
     this.enemies = this.physics.add.group();
     this.gems = this.physics.add.group();
@@ -195,6 +268,8 @@ export default class GameScene extends Phaser.Scene {
       }
       gs.player.hp -= hit.amount;
       this.cameras.main.shake(120, 0.007);
+      this.triggerDamageFlash(hit.amount);
+      this.requestHitStop(42);
       if (gs.player.hasShield) {
         this.dealDamageToEnemy(enemy, 20);
       }
@@ -215,6 +290,8 @@ export default class GameScene extends Phaser.Scene {
         return;
       }
       gs.player.hp -= hit.amount;
+      this.triggerDamageFlash(hit.amount);
+      this.requestHitStop(34);
       if (gs.player.hp <= 0) {
         this.triggerGameOver();
       }
@@ -406,6 +483,7 @@ export default class GameScene extends Phaser.Scene {
     this.spawnRadialBurst(this.player.x, this.player.y, this.skillVfx.secondary, 11, 85);
     this.spawnPulseRing(this.player.x, this.player.y, 18, 76, this.skillVfx.primary, 0.4, 240);
     this.cameras.main.shake(70, 0.004);
+    this.triggerImpactFlash(false);
 
     this.enemies.getChildren().forEach((enemy) => {
       const d = Phaser.Math.Distance.Between(this.player.x, this.player.y, enemy.x, enemy.y);
@@ -425,6 +503,7 @@ export default class GameScene extends Phaser.Scene {
       this.spawnPulseRing(this.player.x, this.player.y, 14, range + 14, this.skillVfx.primary, 0.25, 360);
     });
     this.spawnRadialBurst(this.player.x, this.player.y, this.skillVfx.primary, 10, 95);
+    this.triggerImpactFlash(false);
 
     this.enemies.getChildren().forEach((enemy) => {
       const d = Phaser.Math.Distance.Between(this.player.x, this.player.y, enemy.x, enemy.y);
@@ -459,6 +538,7 @@ export default class GameScene extends Phaser.Scene {
     this.cameras.main.flash(200, 50, 180, 255, false);
     this.spawnPulseRing(this.player.x, this.player.y, 20, range, 0x7fb3d5, 0.4, 360);
     this.spawnRadialBurst(this.player.x, this.player.y, 0xd6eaf8, 14, 140, 1.6);
+    this.requestHitStop(24);
     this.enemies.getChildren().forEach((enemy) => {
       const d = Phaser.Math.Distance.Between(this.player.x, this.player.y, enemy.x, enemy.y);
       if (d <= range) {
@@ -492,6 +572,8 @@ export default class GameScene extends Phaser.Scene {
     this.spawnPulseRing(this.player.x, this.player.y, 8, range + 24, 0xc0392b, 0.24, 380);
     this.spawnRadialBurst(this.player.x, this.player.y, 0xf5b041, 18, 130, 2.2);
     this.cameras.main.shake(130, 0.009);
+    this.requestHitStop(34);
+    this.triggerImpactFlash(true);
 
     this.enemies.getChildren().forEach((enemy) => {
       const d = Phaser.Math.Distance.Between(this.player.x, this.player.y, enemy.x, enemy.y);
@@ -526,6 +608,7 @@ export default class GameScene extends Phaser.Scene {
     orb.trailColor = 0xffa726;
     orb.isFireOrb = true;
     this.spawnPulseRing(this.player.x, this.player.y, 6, 26, 0xffa726, 0.4, 180);
+    this.triggerImpactFlash(false);
   }
 
   executeRogueShadowVolley() {
@@ -744,8 +827,11 @@ export default class GameScene extends Phaser.Scene {
     if (critResult.isCritical) {
       this.spawnFloatingText(enemy.x, enemy.y - 20, "CRIT", 0xf1c40f);
       this.spawnRadialBurst(enemy.x, enemy.y - 2, 0xf1c40f, 8, 45);
+      this.requestHitStop(30);
+      this.triggerImpactFlash(true);
     } else {
       this.spawnRadialBurst(enemy.x, enemy.y - 1, this.skillVfx.primary, 5, 28, 1.6);
+      this.requestHitStop(8);
     }
     this.onSuccessfulHit();
 
@@ -770,6 +856,9 @@ export default class GameScene extends Phaser.Scene {
     if (enemy.enemyTier === "boss") {
       this.hasBossAlive = false;
       this.spawnFloatingText(enemy.x, enemy.y - 36, "BOSS ABATIDO", 0xf39c12);
+      this.triggerImpactFlash(true);
+      this.requestHitStop(70);
+      this.cameras.main.shake(210, 0.012);
     }
     if (enemy.shadow) {
       enemy.shadow.destroy();
@@ -810,6 +899,8 @@ export default class GameScene extends Phaser.Scene {
         this.spawnFloatingText(this.player.x, this.player.y - 36, "Esquiva", 0x95a5a6);
       } else {
         this.gs.player.hp -= hit.amount;
+        this.triggerDamageFlash(hit.amount);
+        this.requestHitStop(48);
         this.cameras.main.shake(150, 0.009);
         if (this.gs.player.hp <= 0) {
           this.triggerGameOver();
@@ -1034,6 +1125,9 @@ export default class GameScene extends Phaser.Scene {
   handleShadowPositions() {
     this.playerShadow.setPosition(this.player.x, this.player.y + 24);
     this.playerShadow.setDepth(this.player.y - 1);
+    const playerSpeedRatio = Phaser.Math.Clamp(this.player.body.speed / 230, 0, 1);
+    this.playerShadow.setScale(1 + playerSpeedRatio * 0.14, 1 - playerSpeedRatio * 0.12);
+    this.playerShadow.setAlpha(0.28 + playerSpeedRatio * 0.2);
 
     this.enemies.getChildren().forEach((enemy) => {
       if (!enemy.shadow) {
@@ -1042,6 +1136,10 @@ export default class GameScene extends Phaser.Scene {
       const cfg = ENEMY_CONFIG[enemy.enemyType];
       enemy.shadow.setPosition(enemy.x, enemy.y + cfg.bodyH / 2 + 4);
       enemy.shadow.setDepth(enemy.y - 1);
+      const enemySpeedRatio = Phaser.Math.Clamp(enemy.body.speed / 220, 0, 1);
+      const tierBoost = enemy.enemyTier === "boss" ? 0.08 : enemy.enemyTier === "elite" ? 0.04 : 0;
+      enemy.shadow.setScale(1 + enemySpeedRatio * 0.12 + tierBoost, 1 - enemySpeedRatio * 0.1);
+      enemy.shadow.setAlpha(0.22 + enemySpeedRatio * 0.15 + tierBoost * 0.8);
     });
   }
 

@@ -12,6 +12,7 @@ Agora com um modulo ARPG estilo Diablo:
 - painel de equipamento (arma, armadura, reliquia)
 - inimigos elite e mini-boss com afixos perigosos
 - VFX reforcado nas habilidades (impacto, trilha, anel de energia, explosao)
+- feedback premium de combate (hit-stop, flash de impacto, camada cinematica, sombras dinamicas)
 
 ## Dependencias em runtime
 

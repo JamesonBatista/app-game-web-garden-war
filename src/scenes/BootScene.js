@@ -139,6 +139,11 @@ export default class BootScene extends Phaser.Scene {
     g.fillStyle(0xffffff, 1);
     g.fillCircle(8, 8, 7);
     g.generateTexture("bullet", 16, 16);
+
+    g.clear();
+    g.fillStyle(0xffffff, 1);
+    g.fillCircle(4, 4, 3);
+    g.generateTexture("fx-dot", 8, 8);
     g.destroy();
   }
 
