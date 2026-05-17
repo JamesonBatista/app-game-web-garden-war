@@ -13,6 +13,7 @@ Agora com um modulo ARPG estilo Diablo:
 - inimigos elite e mini-boss com afixos perigosos
 - VFX reforcado nas habilidades (impacto, trilha, anel de energia, explosao)
 - feedback premium de combate (hit-stop, flash de impacto, camada cinematica, sombras dinamicas)
+- telegrafia de ataques inimigos, numeros de dano e barra de vida de mini-boss
 
 ## Dependencias em runtime
 
