@@ -17,6 +17,22 @@ export default class BootScene extends Phaser.Scene {
       text.setText(`Carregando... ${Math.floor(v * 100)}%`);
     });
 
+    this.load.spritesheet("asset-hero", "assets/sprites/player/hero_topdown.png", {
+      frameWidth: 40,
+      frameHeight: 64
+    });
+    this.load.spritesheet("asset-goblin", "assets/sprites/enemies/goblin_sheet.png", {
+      frameWidth: 32,
+      frameHeight: 32
+    });
+    this.load.spritesheet("asset-slime", "assets/sprites/enemies/slime_sheet.png", {
+      frameWidth: 32,
+      frameHeight: 32
+    });
+    this.load.on("loaderror", (file) => {
+      console.warn(`Asset falhou (${file.key}), usando fallback interno.`);
+    });
+
     bg.setDepth(10);
     fill.setDepth(11);
     text.setDepth(12);
@@ -35,31 +51,46 @@ export default class BootScene extends Phaser.Scene {
     this.makeIsoTile(g, "tile-dark", 0x2f5f38, 0x3f7d49);
     this.makeIsoTile(g, "tile-flower", 0x3a7d44, 0xe67e22, true);
 
-    this.makeHumanoidSheet(g, "warrior-idle", 64, 64, 4, "idle", {
-      skin: 0xf1c27d,
-      armor: 0x587ca0,
-      cloth: 0x27384d,
-      accent: 0xbdd4ef,
-      metal: 0xc0c5cc
-    });
-    this.makeHumanoidSheet(g, "warrior-walk", 64, 64, 8, "walk", {
-      skin: 0xf1c27d,
-      armor: 0x4f7396,
-      cloth: 0x243448,
-      accent: 0xa8c4e3,
-      metal: 0xc0c5cc
-    });
-    this.makeHumanoidSheet(g, "warrior-attack", 64, 64, 6, "attack", {
-      skin: 0xf1c27d,
-      armor: 0x5d86af,
-      cloth: 0x1f2f41,
-      accent: 0xd1e4f8,
-      metal: 0xd6d9de
-    });
+    if (this.textures.exists("asset-hero")) {
+      this.createHeroSheetsFromAsset();
+    } else {
+      this.makeHumanoidSheet(g, "warrior-idle", 64, 64, 4, "idle", {
+        skin: 0xf1c27d,
+        armor: 0x587ca0,
+        cloth: 0x27384d,
+        accent: 0xbdd4ef,
+        metal: 0xc0c5cc
+      });
+      this.makeHumanoidSheet(g, "warrior-walk", 64, 64, 8, "walk", {
+        skin: 0xf1c27d,
+        armor: 0x4f7396,
+        cloth: 0x243448,
+        accent: 0xa8c4e3,
+        metal: 0xc0c5cc
+      });
+      this.makeHumanoidSheet(g, "warrior-attack", 64, 64, 6, "attack", {
+        skin: 0xf1c27d,
+        armor: 0x5d86af,
+        cloth: 0x1f2f41,
+        accent: 0xd1e4f8,
+        metal: 0xd6d9de
+      });
+    }
 
-    this.makeSlimeSheet(g, "enemy-slime", 48, 48, 4);
-    this.makeGoblinSheet(g, "enemy-goblin", 48, 48, 6);
-    this.makeTankSheet(g, "enemy-tank", 64, 64, 4);
+    if (this.textures.exists("asset-slime")) {
+      this.createSheetFromFramesCentered("asset-slime", "enemy-slime", [0, 1, 2, 1], 48, 48, 30, 30, 0, 10);
+    } else {
+      this.makeSlimeSheet(g, "enemy-slime", 48, 48, 4);
+    }
+
+    if (this.textures.exists("asset-goblin")) {
+      this.createSheetFromFramesCentered("asset-goblin", "enemy-goblin", [1, 2, 3, 4, 5, 6], 48, 48, 34, 34, 0, 10);
+      this.createSheetFromFramesCentered("asset-goblin", "enemy-tank", [24, 25, 26, 27], 64, 64, 52, 52, 0, 12);
+    } else {
+      this.makeGoblinSheet(g, "enemy-goblin", 48, 48, 6);
+      this.makeTankSheet(g, "enemy-tank", 64, 64, 4);
+    }
+
     this.makeSlashSheet(g, "slash", 64, 64, 5);
 
     g.clear();
@@ -72,6 +103,44 @@ export default class BootScene extends Phaser.Scene {
     g.fillCircle(8, 8, 7);
     g.generateTexture("bullet", 16, 16);
     g.destroy();
+  }
+
+  createHeroSheetsFromAsset() {
+    this.createSheetFromFramesCentered("asset-hero", "warrior-idle", [0, 1, 2, 1], 64, 64, 40, 64, 0, 0);
+    this.createSheetFromFramesCentered("asset-hero", "warrior-walk", [6, 7, 8, 9, 10, 11, 8, 7], 64, 64, 40, 64, 0, 0);
+    this.createSheetFromFramesCentered("asset-hero", "warrior-attack", [12, 13, 14, 15, 16, 17], 64, 64, 40, 64, 0, 0);
+  }
+
+  createSheetFromFramesCentered(sourceKey, targetKey, frames, frameW, frameH, drawW, drawH, offsetX = 0, offsetY = 0) {
+    if (this.textures.exists(targetKey)) {
+      return;
+    }
+
+    const texture = this.textures.createCanvas(targetKey, frameW * frames.length, frameH);
+    const ctx = texture.context;
+    const centeredX = Math.floor((frameW - drawW) / 2) + offsetX;
+    const centeredY = Math.floor((frameH - drawH) / 2) + offsetY;
+
+    frames.forEach((frameIndex, i) => {
+      const sourceFrame = this.textures.getFrame(sourceKey, frameIndex);
+      if (!sourceFrame) {
+        return;
+      }
+      ctx.drawImage(
+        sourceFrame.source.image,
+        sourceFrame.cutX,
+        sourceFrame.cutY,
+        sourceFrame.cutWidth,
+        sourceFrame.cutHeight,
+        i * frameW + centeredX,
+        centeredY,
+        drawW,
+        drawH
+      );
+    });
+
+    texture.refresh();
+    this.registerSheetFrames(targetKey, frames.length, frameW, frameH);
   }
 
   makeIsoTile(g, key, fillColor, detailColor, flower = false) {

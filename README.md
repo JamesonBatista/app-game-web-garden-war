@@ -17,6 +17,14 @@ Agora com um modulo ARPG estilo Diablo:
 - Phaser 3.60.0 versionado localmente em `vendor/phaser/phaser.min.js`
 - Nenhuma dependencia externa via CDN para executar o jogo
 
+## Assets visuais (personagens)
+
+O jogo usa sprites locais em `assets/sprites/` para player e inimigos, com fallback interno caso algum arquivo nao carregue.
+
+- `assets/sprites/player/hero_topdown.png` (OpenGameArt - Hero character sprite sheet)
+- `assets/sprites/enemies/goblin_sheet.png` (OpenGameArt - Goblin monster)
+- `assets/sprites/enemies/slime_sheet.png` (OpenGameArt - Slime Animations)
+
 ## Estrutura
 
 ```text
