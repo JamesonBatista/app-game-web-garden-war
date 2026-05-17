@@ -1,6 +1,13 @@
 # Survivors Quest (modular para GitHub Pages)
 
 Jogo roguelite inspirado em Vampire Survivors com visual isometrico em Phaser 3.
+Agora com um modulo ARPG estilo Diablo:
+
+- selecao de classe (Barbaro, Feiticeiro, Ladino)
+- atributos de combate mais realistas (armadura, resistencia, critico, esquiva)
+- recurso de classe (Furia, Mana, Energia)
+- habilidade ativa exclusiva por classe
+- loot com raridade e afixos que melhora o personagem durante a run
 
 ## Estrutura
 
@@ -13,6 +20,8 @@ Jogo roguelite inspirado em Vampire Survivors com visual isometrico em Phaser 3.
     ├── main.js
     ├── constants.js
     ├── state.js
+    ├── systems/
+    │   └── diabloModule.js
     ├── utils/
     │   └── iso.js
     └── scenes/

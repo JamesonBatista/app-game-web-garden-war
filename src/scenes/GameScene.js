@@ -1,14 +1,31 @@
 import { ENEMY_CONFIG, MAP_RADIUS, SKILLS } from "../constants.js";
 import { buildInitialGameState } from "../state.js";
 import { isoToScreen, screenToIso } from "../utils/iso.js";
+import {
+  applyClassPreset,
+  applyLootToPlayer,
+  computeMitigatedDamage,
+  gainClassResource,
+  getClassSkillTree,
+  rollCriticalDamage,
+  rollLootDrop,
+  regenClassResource,
+  trySpendResource
+} from "../systems/diabloModule.js";
 
 export default class GameScene extends Phaser.Scene {
   constructor() {
     super({ key: "GameScene" });
   }
 
+  init(data) {
+    this.selectedClassId = data?.classId ?? this.registry.get("selectedClass") ?? "barbarian";
+  }
+
   create() {
     this.gs = buildInitialGameState();
+    applyClassPreset(this.gs, this.selectedClassId);
+    this.classSkillTree = getClassSkillTree(this.gs.player.classId);
     this.createIsoMap();
     this.createPlayer();
     this.createGroups();
@@ -19,6 +36,7 @@ export default class GameScene extends Phaser.Scene {
     this.createKeyboard();
     this.startBGM();
     this.scheduleNextSpawn();
+    this.updateSkillsHUD();
     this.cameras.main.fadeIn(350, 0, 0, 0);
   }
 
@@ -125,8 +143,13 @@ export default class GameScene extends Phaser.Scene {
       if (gs.player.invincible > 0) {
         return;
       }
-      gs.player.hp -= enemy.damage;
-      gs.player.invincible = 800;
+      const hit = computeMitigatedDamage(enemy.damage, gs.player);
+      gs.player.invincible = hit.dodged ? 280 : 700;
+      if (hit.dodged) {
+        this.spawnFloatingText(this.player.x, this.player.y - 36, "Esquiva", 0x95a5a6);
+        return;
+      }
+      gs.player.hp -= hit.amount;
       this.cameras.main.shake(120, 0.007);
       if (gs.player.hasShield) {
         this.dealDamageToEnemy(enemy, 20);
@@ -140,9 +163,14 @@ export default class GameScene extends Phaser.Scene {
       if (gs.player.invincible > 0) {
         return;
       }
-      gs.player.hp -= bullet.damage ?? 5;
-      gs.player.invincible = 500;
+      const hit = computeMitigatedDamage(bullet.damage ?? 5, gs.player);
+      gs.player.invincible = hit.dodged ? 250 : 500;
       bullet.destroy();
+      if (hit.dodged) {
+        this.spawnFloatingText(this.player.x, this.player.y - 36, "Esquiva", 0x95a5a6);
+        return;
+      }
+      gs.player.hp -= hit.amount;
       if (gs.player.hp <= 0) {
         this.triggerGameOver();
       }
@@ -150,7 +178,13 @@ export default class GameScene extends Phaser.Scene {
 
     this.physics.add.overlap(this.playerBullets, this.enemies, (bullet, enemy) => {
       this.dealDamageToEnemy(enemy, bullet.damage ?? this.gs.player.damage * 0.7);
-      bullet.destroy();
+      if ((bullet.splashRadius ?? 0) > 0) {
+        this.executeSplashDamage(enemy.x, enemy.y, bullet.splashRadius, (bullet.damage ?? 10) * 0.65);
+      }
+      bullet.pierce = (bullet.pierce ?? 0) - 1;
+      if (bullet.pierce < 0) {
+        bullet.destroy();
+      }
     });
   }
 
@@ -265,6 +299,13 @@ export default class GameScene extends Phaser.Scene {
     if (p.invincible > 0) {
       p.invincible -= delta;
     }
+    regenClassResource(p, delta);
+
+    p.classSkillElapsed += delta;
+    if (p.classSkillElapsed >= p.classSkillCooldown) {
+      p.classSkillElapsed = 0;
+      this.executeClassSkill();
+    }
 
     p.slashElapsed += delta;
     if (p.slashElapsed >= p.slashCooldown) {
@@ -359,6 +400,8 @@ export default class GameScene extends Phaser.Scene {
       bullet.setActive(true).setVisible(true).clearTint();
       bullet.setVelocity(Math.cos(rad) * 210, Math.sin(rad) * 210);
       bullet.damage = this.gs.player.damage * 0.7;
+      bullet.pierce = 0;
+      bullet.splashRadius = 0;
       bullet.lifespan = 1200;
       bullet.setDepth(this.player.y);
     });
@@ -373,6 +416,90 @@ export default class GameScene extends Phaser.Scene {
         enemy.frozen = 2500;
         enemy.setTint(0x7ff0e8);
       }
+    });
+  }
+
+  executeClassSkill() {
+    const p = this.gs.player;
+    if (!trySpendResource(p, p.classSkillCost)) {
+      return;
+    }
+
+    if (p.classId === "barbarian") {
+      this.executeBarbarianEarthquake();
+      return;
+    }
+    if (p.classId === "sorcerer") {
+      this.executeSorcererFireOrb();
+      return;
+    }
+    this.executeRogueShadowVolley();
+  }
+
+  executeBarbarianEarthquake() {
+    const range = 116;
+    const damage = this.gs.player.damage * 1.8;
+    const quake = this.add.circle(this.player.x, this.player.y, 15, 0xe67e22, 0.45);
+    quake.setDepth(this.player.y - 1);
+    this.tweens.add({
+      targets: quake,
+      radius: range,
+      alpha: 0,
+      duration: 330,
+      onComplete: () => quake.destroy()
+    });
+
+    this.enemies.getChildren().forEach((enemy) => {
+      const d = Phaser.Math.Distance.Between(this.player.x, this.player.y, enemy.x, enemy.y);
+      if (d <= range) {
+        this.dealDamageToEnemy(enemy, damage);
+        this.physics.velocityFromRotation(
+          Phaser.Math.Angle.Between(this.player.x, this.player.y, enemy.x, enemy.y),
+          130,
+          enemy.body.velocity
+        );
+      }
+    });
+  }
+
+  executeSorcererFireOrb() {
+    const target = this.getNearestEnemy();
+    if (!target) {
+      return;
+    }
+
+    const orb = this.playerBullets.get(this.player.x, this.player.y, "bullet");
+    if (!orb) {
+      return;
+    }
+    orb.setActive(true).setVisible(true).setTint(0xff8c00);
+    const angle = Phaser.Math.Angle.Between(this.player.x, this.player.y, target.x, target.y);
+    orb.setVelocity(Math.cos(angle) * 250, Math.sin(angle) * 250);
+    orb.damage = this.gs.player.damage * 1.6;
+    orb.pierce = 0;
+    orb.splashRadius = 72;
+    orb.lifespan = 1500;
+  }
+
+  executeRogueShadowVolley() {
+    const targets = this.enemies.getChildren().slice(0, 3);
+    if (!targets.length) {
+      return;
+    }
+
+    targets.forEach((enemy, index) => {
+      const bullet = this.playerBullets.get(this.player.x, this.player.y, "bullet");
+      if (!bullet) {
+        return;
+      }
+      const spread = Phaser.Math.DegToRad((index - 1) * 10);
+      const baseAngle = Phaser.Math.Angle.Between(this.player.x, this.player.y, enemy.x, enemy.y) + spread;
+      bullet.setActive(true).setVisible(true).setTint(0x9b59b6);
+      bullet.setVelocity(Math.cos(baseAngle) * 300, Math.sin(baseAngle) * 300);
+      bullet.damage = this.gs.player.damage * 1.15;
+      bullet.pierce = 1;
+      bullet.splashRadius = 0;
+      bullet.lifespan = 1100;
     });
   }
 
@@ -444,17 +571,71 @@ export default class GameScene extends Phaser.Scene {
     bullet.setActive(true).setVisible(true).setTint(0xe74c3c);
     bullet.setVelocity(Math.cos(angle) * bulletSpeed, Math.sin(angle) * bulletSpeed);
     bullet.damage = ENEMY_CONFIG[enemy.enemyType].damage;
+    bullet.pierce = 0;
+    bullet.splashRadius = 0;
     bullet.lifespan = 2200;
   }
 
+  executeSplashDamage(x, y, radius, damage) {
+    const splash = this.add.circle(x, y, 10, 0xf39c12, 0.4);
+    splash.setDepth(y + 1);
+    this.tweens.add({
+      targets: splash,
+      radius,
+      alpha: 0,
+      duration: 180,
+      onComplete: () => splash.destroy()
+    });
+
+    this.enemies.getChildren().forEach((other) => {
+      const dist = Phaser.Math.Distance.Between(x, y, other.x, other.y);
+      if (dist <= radius) {
+        this.dealDamageToEnemy(other, damage);
+      }
+    });
+  }
+
+  getNearestEnemy() {
+    let nearest = null;
+    let nearestDistance = Number.POSITIVE_INFINITY;
+    this.enemies.getChildren().forEach((enemy) => {
+      const dist = Phaser.Math.Distance.Between(this.player.x, this.player.y, enemy.x, enemy.y);
+      if (dist < nearestDistance) {
+        nearest = enemy;
+        nearestDistance = dist;
+      }
+    });
+    return nearest;
+  }
+
+  spawnFloatingText(x, y, text, color = 0xffffff) {
+    const label = this.add.text(x, y, text, {
+      fontSize: "12px",
+      color: Phaser.Display.Color.IntegerToColor(color).rgba
+    }).setOrigin(0.5);
+    label.setDepth(y + 2000);
+    this.tweens.add({
+      targets: label,
+      y: y - 26,
+      alpha: 0,
+      duration: 600,
+      onComplete: () => label.destroy()
+    });
+  }
+
   dealDamageToEnemy(enemy, damage) {
-    enemy.hp -= damage;
+    const critResult = rollCriticalDamage(damage, this.gs.player);
+    enemy.hp -= critResult.amount;
     this.tweens.add({
       targets: enemy,
       alpha: 0.3,
       yoyo: true,
       duration: 80
     });
+    if (critResult.isCritical) {
+      this.spawnFloatingText(enemy.x, enemy.y - 20, "CRIT", 0xf1c40f);
+    }
+    this.onSuccessfulHit();
 
     if (enemy.hp <= 0) {
       this.killEnemy(enemy);
@@ -465,10 +646,29 @@ export default class GameScene extends Phaser.Scene {
     this.gs.kills += 1;
     this.spawnGem(enemy.x, enemy.y, enemy.xpReward);
     this.emitDeathParticles(enemy.x, enemy.y);
+    gainClassResource(this.gs.player, 7);
+    const loot = rollLootDrop(enemy.enemyType, this.gs.wave);
+    if (loot) {
+      applyLootToPlayer(this.gs.player, loot);
+      this.spawnFloatingText(enemy.x, enemy.y - 32, loot.name, Phaser.Display.Color.HexStringToColor(loot.rarity.color).color);
+    }
     if (enemy.shadow) {
       enemy.shadow.destroy();
     }
     enemy.destroy();
+  }
+
+  onSuccessfulHit() {
+    const p = this.gs.player;
+    if (p.classId === "barbarian") {
+      gainClassResource(p, 5);
+      return;
+    }
+    if (p.classId === "rogue") {
+      gainClassResource(p, 2.5);
+      return;
+    }
+    gainClassResource(p, 1.2);
   }
 
   emitDeathParticles(x, y) {
@@ -536,8 +736,14 @@ export default class GameScene extends Phaser.Scene {
   triggerLevelUp() {
     this.gs.paused = true;
     const activeIds = this.gs.player.skills;
-    const available = SKILLS.filter((s) => !activeIds.includes(s.id));
+    const baseAvailable = SKILLS.filter((s) => !activeIds.includes(s.id));
+    const classAvailable = this.classSkillTree.filter((s) => !activeIds.includes(s.id));
+    const available = [...classAvailable, ...baseAvailable];
     const choices = Phaser.Utils.Array.Shuffle(available).slice(0, 3);
+    if (!choices.length) {
+      this.gs.paused = false;
+      return;
+    }
 
     this.scene.launch("LevelUpScene", {
       choices,
@@ -554,21 +760,28 @@ export default class GameScene extends Phaser.Scene {
   createHUD() {
     const { width } = this.scale;
     const sf = (obj) => obj.setScrollFactor(0).setDepth(9998);
-    sf(this.add.rectangle(width / 2, 36, width, 72, 0x000000, 0.55));
+    sf(this.add.rectangle(width / 2, 52, width, 104, 0x000000, 0.62));
 
     sf(this.add.text(12, 12, "HP", { fontSize: "13px", color: "#fff" }));
     this.hudHpBg = sf(this.add.rectangle(width / 2 + 10, 20, width - 80, 16, 0x333333).setOrigin(0, 0.5));
     this.hudHpFill = sf(this.add.rectangle(width / 2 + 10 - (width - 80) / 2, 20, width - 80, 16, 0xe74c3c).setOrigin(0, 0.5));
     this.hudHpText = sf(this.add.text(width - 10, 20, "", { fontSize: "11px", color: "#fff" }).setOrigin(1, 0.5));
 
-    sf(this.add.text(12, 40, "XP", { fontSize: "13px", color: "#fff" }));
-    this.hudXpBg = sf(this.add.rectangle(width / 2 + 10, 46, width - 80, 10, 0x333333).setOrigin(0, 0.5));
-    this.hudXpFill = sf(this.add.rectangle(width / 2 + 10 - (width - 80) / 2, 46, 0, 10, 0x3498db).setOrigin(0, 0.5));
+    this.hudResourceLabel = sf(this.add.text(12, 38, this.gs.player.resourceType, { fontSize: "13px", color: "#fff" }));
+    this.hudResourceBg = sf(this.add.rectangle(width / 2 + 10, 44, width - 80, 10, 0x333333).setOrigin(0, 0.5));
+    this.hudResourceFill = sf(this.add.rectangle(width / 2 + 10 - (width - 80) / 2, 44, 0, 10, 0x8e44ad).setOrigin(0, 0.5));
+    this.hudResourceText = sf(this.add.text(width - 10, 44, "", { fontSize: "10px", color: "#d7bde2" }).setOrigin(1, 0.5));
 
-    this.hudLevel = sf(this.add.text(12, 60, "Nivel 1", { fontSize: "12px", color: "#f1c40f", fontStyle: "bold" }));
-    this.hudKills = sf(this.add.text(width / 2, 60, "0 kills", { fontSize: "12px", color: "#fff" }).setOrigin(0.5, 0));
-    this.hudTimer = sf(this.add.text(width - 12, 60, "0:00", { fontSize: "12px", color: "#fff" }).setOrigin(1, 0));
-    this.hudSkills = sf(this.add.text(12, 78, "", { fontSize: "10px", color: "#aaa" }));
+    sf(this.add.text(12, 56, "XP", { fontSize: "13px", color: "#fff" }));
+    this.hudXpBg = sf(this.add.rectangle(width / 2 + 10, 62, width - 80, 10, 0x333333).setOrigin(0, 0.5));
+    this.hudXpFill = sf(this.add.rectangle(width / 2 + 10 - (width - 80) / 2, 62, 0, 10, 0x3498db).setOrigin(0, 0.5));
+
+    this.hudClass = sf(this.add.text(12, 74, this.gs.player.className, { fontSize: "12px", color: "#f39c12", fontStyle: "bold" }));
+    this.hudLevel = sf(this.add.text(120, 74, "Nivel 1", { fontSize: "12px", color: "#f1c40f", fontStyle: "bold" }));
+    this.hudKills = sf(this.add.text(width / 2, 74, "0 kills", { fontSize: "12px", color: "#fff" }).setOrigin(0.5, 0));
+    this.hudTimer = sf(this.add.text(width - 12, 74, "0:00", { fontSize: "12px", color: "#fff" }).setOrigin(1, 0));
+    this.hudDefense = sf(this.add.text(12, 90, "ARM 0 | RES 0 | PODER 0", { fontSize: "10px", color: "#bdc3c7" }));
+    this.hudSkills = sf(this.add.text(12, 104, "", { fontSize: "10px", color: "#aaa" }));
   }
 
   updateHUD() {
@@ -576,9 +789,14 @@ export default class GameScene extends Phaser.Scene {
     const bw = this.hudHpBg.width;
     this.hudHpFill.width = bw * Phaser.Math.Clamp(p.hp / p.maxHp, 0, 1);
     this.hudHpText.setText(`${Math.ceil(p.hp)}/${p.maxHp}`);
+    this.hudResourceFill.width = bw * Phaser.Math.Clamp(p.resource / p.resourceMax, 0, 1);
+    this.hudResourceText.setText(`${Math.floor(p.resource)}/${p.resourceMax}`);
     this.hudXpFill.width = bw * (p.xp / p.xpNext);
     this.hudLevel.setText(`Nivel ${p.level}`);
     this.hudKills.setText(`${this.gs.kills} kills`);
+    this.hudDefense.setText(
+      `ARM ${Math.floor(p.armor)} | RES ${Math.floor(p.resistance)} | PODER ${Math.floor(p.equipmentPower ?? 0)}`
+    );
     const secs = Math.floor(this.gs.elapsed / 1000);
     const m = Math.floor(secs / 60);
     const s = String(secs % 60).padStart(2, "0");
@@ -596,7 +814,7 @@ export default class GameScene extends Phaser.Scene {
       .map((id) => SKILLS.find((s) => s.id === id)?.name ?? "")
       .filter(Boolean)
       .join(" | ");
-    this.hudSkills.setText(names);
+    this.hudSkills.setText(`${this.gs.player.classSkillName} | ${names}`.trim());
   }
 
   handleDepthSorting() {
