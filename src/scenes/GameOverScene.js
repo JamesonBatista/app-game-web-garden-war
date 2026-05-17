@@ -21,9 +21,11 @@ export default class GameOverScene extends Phaser.Scene {
     }).setOrigin(0.5);
 
     const statsText = [
+      `Classe: ${this.stats.className ?? "-"}`,
       `Sobreviveu: ${this.stats.time}`,
       `Kills: ${this.stats.kills}`,
-      `Nivel alcancado: ${this.stats.level}`
+      `Nivel alcancado: ${this.stats.level}`,
+      `Poder de Equipamento: ${this.stats.power ?? 0}`
     ].join("\n");
 
     this.add.text(width / 2, height * 0.48, statsText, {

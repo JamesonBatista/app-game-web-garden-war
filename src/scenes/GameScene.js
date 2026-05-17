@@ -3,11 +3,12 @@ import { buildInitialGameState } from "../state.js";
 import { isoToScreen, screenToIso } from "../utils/iso.js";
 import {
   applyClassPreset,
-  applyLootToPlayer,
   computeMitigatedDamage,
+  equipLootItem,
   gainClassResource,
   getClassSkillTree,
   rollCriticalDamage,
+  rollEnemyModifiers,
   rollLootDrop,
   regenClassResource,
   trySpendResource
@@ -26,6 +27,7 @@ export default class GameScene extends Phaser.Scene {
     this.gs = buildInitialGameState();
     applyClassPreset(this.gs, this.selectedClassId);
     this.classSkillTree = getClassSkillTree(this.gs.player.classId);
+    this.hasBossAlive = false;
     this.createIsoMap();
     this.createPlayer();
     this.createGroups();
@@ -53,6 +55,7 @@ export default class GameScene extends Phaser.Scene {
     this.updateBullets(delta);
     this.handleDepthSorting();
     this.handleShadowPositions();
+    this.updateLootDrops(delta);
     this.recycleTiles();
     this.updateHUD();
   }
@@ -134,6 +137,7 @@ export default class GameScene extends Phaser.Scene {
     this.playerBullets = this.physics.add.group({ maxSize: 40 });
     this.enemyBullets = this.physics.add.group({ maxSize: 40 });
     this.shadows = this.add.group();
+    this.lootDrops = this.add.group();
   }
 
   createCollisions() {
@@ -510,6 +514,7 @@ export default class GameScene extends Phaser.Scene {
       .map(([type]) => type);
     const type = available[Math.floor(Math.random() * available.length)];
     const cfg = ENEMY_CONFIG[type];
+    const modifiers = rollEnemyModifiers(type, wave, this.gs.kills, this.hasBossAlive);
     const angle = Math.random() * Math.PI * 2;
     const dist = 340 + Math.random() * 120;
     const x = this.player.x + Math.cos(angle) * dist;
@@ -517,16 +522,34 @@ export default class GameScene extends Phaser.Scene {
 
     const enemy = this.enemies.create(x, y, cfg.anim);
     this.safePlay(enemy, cfg.anim);
-    enemy.setScale(cfg.scale);
+    enemy.setScale(cfg.scale + modifiers.scaleBonus);
     enemy.body.setSize(cfg.bodyW, cfg.bodyH);
     enemy.body.setOffset(cfg.bodyOffsetX, cfg.bodyOffsetY);
     enemy.enemyType = type;
-    enemy.hp = cfg.hp + (wave - 1) * Math.floor(cfg.hp * 0.2);
-    enemy.speed = cfg.speed;
-    enemy.damage = cfg.damage;
-    enemy.xpReward = cfg.xp;
+    enemy.enemyTier = modifiers.tier;
+    enemy.affixes = modifiers.affixes;
+    enemy.hp = (cfg.hp + (wave - 1) * Math.floor(cfg.hp * 0.2)) * modifiers.hpMultiplier;
+    enemy.speed = cfg.speed * modifiers.speedMultiplier;
+    enemy.damage = cfg.damage * modifiers.damageMultiplier;
+    enemy.xpReward = cfg.xp * modifiers.xpMultiplier;
     enemy.frozen = 0;
     enemy.shootTimer = 0;
+    enemy.canShoot = Boolean(cfg.canShoot || modifiers.canShoot);
+    enemy.shootCooldown = (cfg.shootCooldown ?? 2800) * (modifiers.shootCooldownMultiplier ?? 1);
+    enemy.shootRange = cfg.shootRange ?? 220;
+    enemy.bulletSpeed = cfg.bulletSpeed ?? 165;
+    enemy.hasDeathExplosion = Boolean(modifiers.hasDeathExplosion);
+    enemy.spawnName = modifiers.name;
+    enemy.baseTint = modifiers.tint;
+    if (modifiers.tint) {
+      enemy.setTint(modifiers.tint);
+    }
+    if (enemy.enemyTier === "boss") {
+      this.hasBossAlive = true;
+      this.spawnFloatingText(enemy.x, enemy.y - 28, "MINI BOSS", 0xe74c3c);
+    } else if (enemy.enemyTier === "elite") {
+      this.spawnFloatingText(enemy.x, enemy.y - 20, "ELITE", 0xf1c40f);
+    }
 
     const shadow = this.add.ellipse(x, y + cfg.bodyH / 2 + 6, cfg.shadowW, cfg.shadowH, 0x000000, 0.35);
     shadow.setDepth(-1);
@@ -542,6 +565,9 @@ export default class GameScene extends Phaser.Scene {
         if (enemy.frozen <= 0) {
           enemy.frozen = 0;
           enemy.clearTint();
+          if (enemy.baseTint) {
+            enemy.setTint(enemy.baseTint);
+          }
         }
         return;
       }
@@ -550,13 +576,12 @@ export default class GameScene extends Phaser.Scene {
       enemy.setVelocity(Math.cos(angle) * enemy.speed, Math.sin(angle) * enemy.speed);
       enemy.setFlipX(enemy.x > this.player.x);
 
-      if (ENEMY_CONFIG[enemy.enemyType]?.canShoot) {
-        const cfg = ENEMY_CONFIG[enemy.enemyType];
+      if (enemy.canShoot) {
         enemy.shootTimer += delta;
         const dist = Phaser.Math.Distance.Between(enemy.x, enemy.y, this.player.x, this.player.y);
-        if (enemy.shootTimer >= cfg.shootCooldown && dist <= cfg.shootRange) {
+        if (enemy.shootTimer >= enemy.shootCooldown && dist <= enemy.shootRange) {
           enemy.shootTimer = 0;
-          this.enemyShoot(enemy, cfg.bulletSpeed);
+          this.enemyShoot(enemy, enemy.bulletSpeed);
         }
       }
     });
@@ -570,7 +595,7 @@ export default class GameScene extends Phaser.Scene {
     const angle = Phaser.Math.Angle.Between(enemy.x, enemy.y, this.player.x, this.player.y);
     bullet.setActive(true).setVisible(true).setTint(0xe74c3c);
     bullet.setVelocity(Math.cos(angle) * bulletSpeed, Math.sin(angle) * bulletSpeed);
-    bullet.damage = ENEMY_CONFIG[enemy.enemyType].damage;
+    bullet.damage = enemy.damage;
     bullet.pierce = 0;
     bullet.splashRadius = 0;
     bullet.lifespan = 2200;
@@ -647,10 +672,17 @@ export default class GameScene extends Phaser.Scene {
     this.spawnGem(enemy.x, enemy.y, enemy.xpReward);
     this.emitDeathParticles(enemy.x, enemy.y);
     gainClassResource(this.gs.player, 7);
-    const loot = rollLootDrop(enemy.enemyType, this.gs.wave);
+    const loot = rollLootDrop(enemy.enemyType, this.gs.wave, enemy.enemyTier);
     if (loot) {
-      applyLootToPlayer(this.gs.player, loot);
-      this.spawnFloatingText(enemy.x, enemy.y - 32, loot.name, Phaser.Display.Color.HexStringToColor(loot.rarity.color).color);
+      this.spawnLootDrop(enemy.x, enemy.y, loot);
+    }
+
+    if (enemy.hasDeathExplosion) {
+      this.triggerEnemyDeathExplosion(enemy.x, enemy.y, enemy.damage * 1.1);
+    }
+    if (enemy.enemyTier === "boss") {
+      this.hasBossAlive = false;
+      this.spawnFloatingText(enemy.x, enemy.y - 36, "BOSS ABATIDO", 0xf39c12);
     }
     if (enemy.shadow) {
       enemy.shadow.destroy();
@@ -669,6 +701,34 @@ export default class GameScene extends Phaser.Scene {
       return;
     }
     gainClassResource(p, 1.2);
+  }
+
+  triggerEnemyDeathExplosion(x, y, rawDamage) {
+    const radius = 72;
+    const ring = this.add.circle(x, y, 12, 0xe74c3c, 0.42);
+    ring.setDepth(y + 5);
+    this.tweens.add({
+      targets: ring,
+      radius,
+      alpha: 0,
+      duration: 240,
+      onComplete: () => ring.destroy()
+    });
+
+    const dist = Phaser.Math.Distance.Between(x, y, this.player.x, this.player.y);
+    if (dist <= radius && this.gs.player.invincible <= 0) {
+      const hit = computeMitigatedDamage(rawDamage, this.gs.player);
+      this.gs.player.invincible = hit.dodged ? 220 : 520;
+      if (hit.dodged) {
+        this.spawnFloatingText(this.player.x, this.player.y - 36, "Esquiva", 0x95a5a6);
+      } else {
+        this.gs.player.hp -= hit.amount;
+        this.cameras.main.shake(150, 0.009);
+        if (this.gs.player.hp <= 0) {
+          this.triggerGameOver();
+        }
+      }
+    }
   }
 
   emitDeathParticles(x, y) {
@@ -700,6 +760,47 @@ export default class GameScene extends Phaser.Scene {
       repeat: -1,
       duration: 600,
       ease: "Sine.easeInOut"
+    });
+  }
+
+  spawnLootDrop(x, y, loot) {
+    const colorInt = Phaser.Display.Color.HexStringToColor(loot.rarity.color).color;
+    const drop = this.add.circle(x, y, 11, colorInt, 0.92)
+      .setStrokeStyle(2, 0xffffff, 0.85)
+      .setInteractive({ useHandCursor: true });
+    drop.setDepth(y + 3);
+    drop.lootData = loot;
+    drop.lifespan = 18000;
+    drop.baseY = y;
+    this.lootDrops.add(drop);
+
+    drop.on("pointerdown", () => {
+      this.tryEquipLootDrop(drop);
+    });
+  }
+
+  tryEquipLootDrop(drop) {
+    if (!drop?.active || !drop.lootData) {
+      return;
+    }
+
+    const loot = drop.lootData;
+    const current = this.gs.player.equipment?.[loot.slot] ?? null;
+    equipLootItem(this.gs.player, loot);
+    const color = Phaser.Display.Color.HexStringToColor(loot.rarity.color).color;
+    const verb = current ? "Substituido" : "Equipado";
+    this.spawnFloatingText(drop.x, drop.y - 18, `${verb}: ${loot.slotLabel}`, color);
+    this.refreshEquipmentHUD();
+    drop.destroy();
+  }
+
+  updateLootDrops(delta) {
+    this.lootDrops.getChildren().forEach((drop) => {
+      drop.lifespan -= delta;
+      drop.setY(drop.baseY + Math.sin((this.gs.elapsed + drop.x) / 180) * 3.5);
+      if (drop.lifespan <= 0) {
+        drop.destroy();
+      }
     });
   }
 
@@ -760,7 +861,7 @@ export default class GameScene extends Phaser.Scene {
   createHUD() {
     const { width } = this.scale;
     const sf = (obj) => obj.setScrollFactor(0).setDepth(9998);
-    sf(this.add.rectangle(width / 2, 52, width, 104, 0x000000, 0.62));
+    sf(this.add.rectangle(width / 2, 64, width, 128, 0x000000, 0.62));
 
     sf(this.add.text(12, 12, "HP", { fontSize: "13px", color: "#fff" }));
     this.hudHpBg = sf(this.add.rectangle(width / 2 + 10, 20, width - 80, 16, 0x333333).setOrigin(0, 0.5));
@@ -782,6 +883,14 @@ export default class GameScene extends Phaser.Scene {
     this.hudTimer = sf(this.add.text(width - 12, 74, "0:00", { fontSize: "12px", color: "#fff" }).setOrigin(1, 0));
     this.hudDefense = sf(this.add.text(12, 90, "ARM 0 | RES 0 | PODER 0", { fontSize: "10px", color: "#bdc3c7" }));
     this.hudSkills = sf(this.add.text(12, 104, "", { fontSize: "10px", color: "#aaa" }));
+
+    const invPanelX = width - 124;
+    sf(this.add.rectangle(invPanelX + 58, 115, 116, 52, 0x151515, 0.85).setStrokeStyle(1, 0x444444));
+    sf(this.add.text(invPanelX + 6, 91, "Equipado", { fontSize: "9px", color: "#ecf0f1" }));
+    this.hudSlotWeapon = sf(this.add.text(invPanelX + 6, 103, "Arma: -", { fontSize: "9px", color: "#bdc3c7" }));
+    this.hudSlotArmor = sf(this.add.text(invPanelX + 6, 115, "Armadura: -", { fontSize: "9px", color: "#bdc3c7" }));
+    this.hudSlotTrinket = sf(this.add.text(invPanelX + 6, 127, "Reliquia: -", { fontSize: "9px", color: "#bdc3c7" }));
+    this.refreshEquipmentHUD();
   }
 
   updateHUD() {
@@ -809,6 +918,15 @@ export default class GameScene extends Phaser.Scene {
     }
   }
 
+  refreshEquipmentHUD() {
+    const weapon = this.gs.player.equipment.weapon?.rarity.label ?? "-";
+    const armor = this.gs.player.equipment.armor?.rarity.label ?? "-";
+    const trinket = this.gs.player.equipment.trinket?.rarity.label ?? "-";
+    this.hudSlotWeapon.setText(`Arma: ${weapon}`);
+    this.hudSlotArmor.setText(`Armadura: ${armor}`);
+    this.hudSlotTrinket.setText(`Reliquia: ${trinket}`);
+  }
+
   updateSkillsHUD() {
     const names = this.gs.player.skills
       .map((id) => SKILLS.find((s) => s.id === id)?.name ?? "")
@@ -821,6 +939,7 @@ export default class GameScene extends Phaser.Scene {
     this.player.setDepth(this.player.y);
     this.enemies.getChildren().forEach((e) => e.setDepth(e.y));
     this.gems.getChildren().forEach((g) => g.setDepth(g.y - 10));
+    this.lootDrops.getChildren().forEach((d) => d.setDepth(d.y + 2));
     this.playerBullets.getChildren().forEach((b) => b.setDepth(b.y));
     this.enemyBullets.getChildren().forEach((b) => b.setDepth(b.y));
   }
@@ -882,7 +1001,9 @@ export default class GameScene extends Phaser.Scene {
       this.scene.start("GameOverScene", {
         time: `${m}:${s}`,
         kills: this.gs.kills,
-        level: this.gs.player.level
+        level: this.gs.player.level,
+        className: this.gs.player.className,
+        power: Math.floor(this.gs.player.equipmentPower ?? 0)
       });
     });
   }

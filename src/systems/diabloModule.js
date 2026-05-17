@@ -1,9 +1,15 @@
 const RARITY_CONFIG = [
-  { id: "common", label: "Comum", color: "#bdc3c7", weight: 55, multiplier: 1 },
-  { id: "magic", label: "Magico", color: "#3498db", weight: 28, multiplier: 1.25 },
-  { id: "rare", label: "Raro", color: "#f1c40f", weight: 12, multiplier: 1.6 },
-  { id: "legendary", label: "Lendario", color: "#e67e22", weight: 5, multiplier: 2.2 }
+  { id: "common", label: "Comum", color: "#bdc3c7", weight: 56, multiplier: 1 },
+  { id: "magic", label: "Magico", color: "#3498db", weight: 28, multiplier: 1.28 },
+  { id: "rare", label: "Raro", color: "#f1c40f", weight: 12, multiplier: 1.75 },
+  { id: "legendary", label: "Lendario", color: "#e67e22", weight: 4, multiplier: 2.4 }
 ];
+
+export const EQUIPMENT_SLOTS = {
+  weapon: { id: "weapon", label: "Arma" },
+  armor: { id: "armor", label: "Armadura" },
+  trinket: { id: "trinket", label: "Reliquia" }
+};
 
 export const CLASS_DEFINITIONS = {
   barbarian: {
@@ -147,36 +153,51 @@ const CLASS_SKILL_TREES = {
 const LOOT_AFFIXES = [
   {
     id: "damage",
+    slot: "weapon",
     names: ["Lamina", "Runa de Carnificina", "Marca do Carrasco"],
-    apply: (player, amount) => { player.damage += amount; },
+    stat: "damage",
+    operation: "add",
     format: (amount) => `+${amount} Dano`
   },
   {
     id: "armor",
+    slot: "armor",
     names: ["Couraca", "Pele Endurecida", "Manto de Ferro"],
-    apply: (player, amount) => { player.armor += amount; },
+    stat: "armor",
+    operation: "add",
     format: (amount) => `+${amount} Armadura`
   },
   {
     id: "resistance",
-    names: ["Talismã", "Selo Arcano", "Anel de Cinzas"],
-    apply: (player, amount) => { player.resistance += amount; },
+    slot: "trinket",
+    names: ["Talisma", "Selo Arcano", "Anel de Cinzas"],
+    stat: "resistance",
+    operation: "add",
     format: (amount) => `+${amount} Resistencia`
   },
   {
     id: "maxHp",
+    slot: "armor",
     names: ["Coracao de Besta", "Osso Vital", "Sangue Antigo"],
-    apply: (player, amount) => {
-      player.maxHp += amount;
-      player.hp = Math.min(player.hp + Math.floor(amount * 0.5), player.maxHp);
-    },
+    stat: "maxHp",
+    operation: "add",
     format: (amount) => `+${amount} Vida Max`
   },
   {
     id: "critChance",
+    slot: "weapon",
     names: ["Olho de Corvo", "Insignia Vermelha", "Gume Assassino"],
-    apply: (player, amount) => { player.critChance = Math.min(0.85, player.critChance + amount / 100); },
+    stat: "critChance",
+    operation: "percent_points",
     format: (amount) => `+${amount}% Crit`
+  },
+  {
+    id: "dodgeChance",
+    slot: "trinket",
+    names: ["Vento Frio", "Passo Fantasma", "Escama Lunar"],
+    stat: "dodgeChance",
+    operation: "percent_points",
+    format: (amount) => `+${amount}% Esquiva`
   }
 ];
 
@@ -214,6 +235,12 @@ export function applyClassPreset(gs, classId) {
   p.classSkillElapsed = 0;
 
   p.equipmentPower = 0;
+  p.equipment = {
+    weapon: null,
+    armor: null,
+    trinket: null
+  };
+  p.inventoryLog = [];
 }
 
 export function getClassSkillTree(classId) {
@@ -235,6 +262,33 @@ export function trySpendResource(player, amount) {
 
 export function gainClassResource(player, amount) {
   player.resource = Math.min(player.resourceMax, player.resource + amount);
+}
+
+function applyAffixDelta(player, loot, direction) {
+  const sign = direction >= 0 ? 1 : -1;
+  const value = loot.value * sign;
+
+  if (loot.operation === "add") {
+    player[loot.stat] = (player[loot.stat] ?? 0) + value;
+    if (loot.stat === "maxHp") {
+      if (sign > 0) {
+        player.hp = Math.min(player.maxHp, player.hp + Math.floor(loot.value * 0.5));
+      } else {
+        player.hp = Math.min(player.hp, player.maxHp);
+      }
+    }
+    return;
+  }
+
+  if (loot.operation === "percent_points") {
+    player[loot.stat] = (player[loot.stat] ?? 0) + value / 100;
+    if (loot.stat === "critChance") {
+      player.critChance = Math.min(0.9, Math.max(0, player.critChance));
+    }
+    if (loot.stat === "dodgeChance") {
+      player.dodgeChance = Math.min(0.75, Math.max(0, player.dodgeChance));
+    }
+  }
 }
 
 export function rollCriticalDamage(baseDamage, player, rng = Math.random) {
@@ -272,30 +326,114 @@ function pickRarity(rng = Math.random) {
   return RARITY_CONFIG[0];
 }
 
-export function rollLootDrop(enemyType, wave, rng = Math.random) {
-  const baseChance = 0.18 + Math.min(0.22, wave * 0.03) + (enemyType === "tank" ? 0.15 : 0);
+export function rollLootDrop(enemyType, wave, enemyTier = "normal", rng = Math.random) {
+  const tierBonus = enemyTier === "boss" ? 0.65 : enemyTier === "elite" ? 0.28 : 0;
+  const baseChance = 0.18 + Math.min(0.22, wave * 0.03) + (enemyType === "tank" ? 0.15 : 0) + tierBonus;
   if (rng() > baseChance) {
     return null;
   }
 
   const rarity = pickRarity(rng);
   const affix = LOOT_AFFIXES[Math.floor(rng() * LOOT_AFFIXES.length)];
-  const baseValue = 4 + wave * 1.25;
+  const tierMult = enemyTier === "boss" ? 2.8 : enemyTier === "elite" ? 1.45 : 1;
+  const baseValue = (4 + wave * 1.25) * tierMult;
   const scaled = Math.max(1, Math.round(baseValue * rarity.multiplier));
   const name = affix.names[Math.floor(rng() * affix.names.length)];
+  const slot = EQUIPMENT_SLOTS[affix.slot];
 
   return {
     id: `${rarity.id}-${affix.id}-${Date.now()}-${Math.floor(rng() * 999)}`,
     rarity,
+    tier: enemyTier,
     affixId: affix.id,
+    slot: affix.slot,
+    slotLabel: slot.label,
+    stat: affix.stat,
+    operation: affix.operation,
     name: `${rarity.label} ${name}`,
     value: scaled,
-    summary: affix.format(scaled),
-    apply: affix.apply
+    score: Math.round(scaled * rarity.multiplier + (enemyTier === "boss" ? 16 : enemyTier === "elite" ? 7 : 0)),
+    summary: `${slot.label} | ${affix.format(scaled)}`
   };
 }
 
 export function applyLootToPlayer(player, loot) {
-  loot.apply(player, loot.value);
-  player.equipmentPower = (player.equipmentPower ?? 0) + loot.value;
+  applyAffixDelta(player, loot, 1);
+  player.equipmentPower = Math.max(0, (player.equipmentPower ?? 0) + loot.score);
+}
+
+export function removeLootFromPlayer(player, loot) {
+  applyAffixDelta(player, loot, -1);
+  player.equipmentPower = Math.max(0, (player.equipmentPower ?? 0) - loot.score);
+}
+
+export function equipLootItem(player, loot) {
+  const current = player.equipment?.[loot.slot] ?? null;
+  if (current) {
+    removeLootFromPlayer(player, current);
+  }
+  applyLootToPlayer(player, loot);
+  player.equipment[loot.slot] = loot;
+
+  player.inventoryLog.push({
+    id: loot.id,
+    name: loot.name,
+    slot: loot.slot,
+    score: loot.score
+  });
+  if (player.inventoryLog.length > 30) {
+    player.inventoryLog.shift();
+  }
+}
+
+export function rollEnemyModifiers(enemyType, wave, kills, hasBossAlive, rng = Math.random) {
+  let tier = "normal";
+  if (!hasBossAlive && kills > 0 && kills % 45 === 0) {
+    tier = "boss";
+  } else if (rng() < Math.min(0.08 + wave * 0.025, 0.26)) {
+    tier = "elite";
+  }
+
+  const affixPool = ["juggernaut", "haste", "berserker", "arcane", "volatile"];
+  const affixCount = tier === "boss" ? 2 : tier === "elite" ? 1 : 0;
+  const affixes = [];
+  for (let i = 0; i < affixCount; i += 1) {
+    const available = affixPool.filter((item) => !affixes.includes(item));
+    affixes.push(available[Math.floor(rng() * available.length)]);
+  }
+
+  const mod = {
+    tier,
+    affixes,
+    hpMultiplier: tier === "boss" ? 4.8 : tier === "elite" ? 2.1 : 1,
+    damageMultiplier: tier === "boss" ? 2.3 : tier === "elite" ? 1.45 : 1,
+    speedMultiplier: tier === "boss" ? 0.95 : tier === "elite" ? 1.1 : 1,
+    xpMultiplier: tier === "boss" ? 6.5 : tier === "elite" ? 2.4 : 1,
+    scaleBonus: tier === "boss" ? 0.45 : tier === "elite" ? 0.15 : 0,
+    tint: tier === "boss" ? 0xe74c3c : tier === "elite" ? 0xf1c40f : null
+  };
+
+  affixes.forEach((affix) => {
+    if (affix === "juggernaut") {
+      mod.hpMultiplier *= 1.45;
+    } else if (affix === "haste") {
+      mod.speedMultiplier *= 1.33;
+    } else if (affix === "berserker") {
+      mod.damageMultiplier *= 1.38;
+    } else if (affix === "arcane") {
+      mod.damageMultiplier *= 1.18;
+      mod.canShoot = true;
+      mod.shootCooldownMultiplier = 0.72;
+    } else if (affix === "volatile") {
+      mod.hasDeathExplosion = true;
+    }
+  });
+
+  mod.name =
+    tier === "boss"
+      ? `Mini Boss ${enemyType.toUpperCase()}`
+      : tier === "elite"
+      ? `Elite ${enemyType}`
+      : enemyType;
+  return mod;
 }

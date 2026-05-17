@@ -8,6 +8,9 @@ Agora com um modulo ARPG estilo Diablo:
 - recurso de classe (Furia, Mana, Energia)
 - habilidade ativa exclusiva por classe
 - loot com raridade e afixos que melhora o personagem durante a run
+- drops de itens no chao com clique/toque para equipar
+- painel de equipamento (arma, armadura, reliquia)
+- inimigos elite e mini-boss com afixos perigosos
 
 ## Estrutura
 
