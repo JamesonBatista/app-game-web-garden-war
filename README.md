@@ -14,6 +14,7 @@ Agora com um modulo ARPG estilo Diablo:
 - VFX reforcado nas habilidades (impacto, trilha, anel de energia, explosao)
 - feedback premium de combate (hit-stop, flash de impacto, camada cinematica, sombras dinamicas)
 - telegrafia de ataques inimigos, numeros de dano e barra de vida de mini-boss
+- estatisticas completas de run + recorde salvo localmente
 
 ## Dependencias em runtime
 
@@ -51,7 +52,8 @@ Creditos completos em `assets/CREDITS.md`.
     ├── constants.js
     ├── state.js
     ├── systems/
-    │   └── diabloModule.js
+    │   ├── diabloModule.js
+    │   └── progression.js
     ├── utils/
     │   └── iso.js
     └── scenes/

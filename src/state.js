@@ -7,6 +7,17 @@ export function buildInitialGameState() {
     wave: 1,
     spawnInterval: 2000,
     minSpawnInterval: 300,
+    stats: {
+      damageDealt: 0,
+      damageTaken: 0,
+      highestHit: 0,
+      highestTakenHit: 0,
+      crits: 0,
+      dodges: 0,
+      elitesKilled: 0,
+      bossesKilled: 0,
+      lootEquipped: 0
+    },
     player: {
       hp: 100,
       maxHp: 100,

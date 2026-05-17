@@ -28,6 +28,7 @@ export default class GameScene extends Phaser.Scene {
     applyClassPreset(this.gs, this.selectedClassId);
     this.classSkillTree = getClassSkillTree(this.gs.player.classId);
     this.hasBossAlive = false;
+    this.currentBoss = null;
     this.hitStopRemaining = 0;
     this.lastImpactTime = 0;
     this.createIsoMap();
@@ -300,10 +301,13 @@ export default class GameScene extends Phaser.Scene {
       const hit = computeMitigatedDamage(enemy.damage, gs.player);
       gs.player.invincible = hit.dodged ? 280 : 700;
       if (hit.dodged) {
+        this.gs.stats.dodges += 1;
         this.spawnFloatingText(this.player.x, this.player.y - 36, "Esquiva", 0x95a5a6);
         return;
       }
       gs.player.hp -= hit.amount;
+      this.gs.stats.damageTaken += hit.amount;
+      this.gs.stats.highestTakenHit = Math.max(this.gs.stats.highestTakenHit, hit.amount);
       this.cameras.main.shake(120, 0.007);
       this.triggerDamageFlash(hit.amount);
       this.requestHitStop(42);
@@ -324,10 +328,13 @@ export default class GameScene extends Phaser.Scene {
       gs.player.invincible = hit.dodged ? 250 : 500;
       bullet.destroy();
       if (hit.dodged) {
+        this.gs.stats.dodges += 1;
         this.spawnFloatingText(this.player.x, this.player.y - 36, "Esquiva", 0x95a5a6);
         return;
       }
       gs.player.hp -= hit.amount;
+      this.gs.stats.damageTaken += hit.amount;
+      this.gs.stats.highestTakenHit = Math.max(this.gs.stats.highestTakenHit, hit.amount);
       this.triggerDamageFlash(hit.amount);
       this.requestHitStop(34);
       this.spawnDamageNumber(this.player.x, this.player.y - 38, hit.amount, false, true);
@@ -897,6 +904,8 @@ export default class GameScene extends Phaser.Scene {
   dealDamageToEnemy(enemy, damage) {
     const critResult = rollCriticalDamage(damage, this.gs.player);
     enemy.hp -= critResult.amount;
+    this.gs.stats.damageDealt += critResult.amount;
+    this.gs.stats.highestHit = Math.max(this.gs.stats.highestHit, critResult.amount);
     this.tweens.add({
       targets: enemy,
       alpha: 0.3,
@@ -904,6 +913,7 @@ export default class GameScene extends Phaser.Scene {
       duration: 80
     });
     if (critResult.isCritical) {
+      this.gs.stats.crits += 1;
       this.spawnFloatingText(enemy.x, enemy.y - 20, "CRIT", 0xf1c40f);
       this.spawnRadialBurst(enemy.x, enemy.y - 2, 0xf1c40f, 8, 45);
       this.spawnDamageNumber(enemy.x, enemy.y - 34, critResult.amount, true, false);
@@ -923,6 +933,9 @@ export default class GameScene extends Phaser.Scene {
 
   killEnemy(enemy) {
     this.gs.kills += 1;
+    if (enemy.enemyTier === "elite") {
+      this.gs.stats.elitesKilled += 1;
+    }
     this.spawnGem(enemy.x, enemy.y, enemy.xpReward);
     this.emitDeathParticles(enemy.x, enemy.y);
     gainClassResource(this.gs.player, 7);
@@ -937,6 +950,7 @@ export default class GameScene extends Phaser.Scene {
     if (enemy.enemyTier === "boss") {
       this.hasBossAlive = false;
       this.currentBoss = null;
+      this.gs.stats.bossesKilled += 1;
       this.spawnFloatingText(enemy.x, enemy.y - 36, "BOSS ABATIDO", 0xf39c12);
       this.triggerImpactFlash(true);
       this.requestHitStop(70);
@@ -978,9 +992,12 @@ export default class GameScene extends Phaser.Scene {
       const hit = computeMitigatedDamage(rawDamage, this.gs.player);
       this.gs.player.invincible = hit.dodged ? 220 : 520;
       if (hit.dodged) {
+        this.gs.stats.dodges += 1;
         this.spawnFloatingText(this.player.x, this.player.y - 36, "Esquiva", 0x95a5a6);
       } else {
         this.gs.player.hp -= hit.amount;
+        this.gs.stats.damageTaken += hit.amount;
+        this.gs.stats.highestTakenHit = Math.max(this.gs.stats.highestTakenHit, hit.amount);
         this.spawnDamageNumber(this.player.x, this.player.y - 38, hit.amount, false, true);
         this.triggerDamageFlash(hit.amount);
         this.requestHitStop(48);
@@ -1051,6 +1068,7 @@ export default class GameScene extends Phaser.Scene {
     const color = Phaser.Display.Color.HexStringToColor(loot.rarity.color).color;
     const verb = current ? "Substituido" : "Equipado";
     this.spawnFloatingText(drop.x, drop.y - 18, `${verb}: ${loot.slotLabel}`, color);
+    this.gs.stats.lootEquipped += 1;
     this.refreshEquipmentHUD();
     drop.destroy();
   }
@@ -1327,7 +1345,17 @@ export default class GameScene extends Phaser.Scene {
         kills: this.gs.kills,
         level: this.gs.player.level,
         className: this.gs.player.className,
-        power: Math.floor(this.gs.player.equipmentPower ?? 0)
+        power: Math.floor(this.gs.player.equipmentPower ?? 0),
+        survivalSeconds: secs,
+        damageDealt: this.gs.stats.damageDealt,
+        damageTaken: this.gs.stats.damageTaken,
+        highestHit: this.gs.stats.highestHit,
+        highestTakenHit: this.gs.stats.highestTakenHit,
+        crits: this.gs.stats.crits,
+        dodges: this.gs.stats.dodges,
+        elitesKilled: this.gs.stats.elitesKilled,
+        bossesKilled: this.gs.stats.bossesKilled,
+        lootEquipped: this.gs.stats.lootEquipped
       });
     });
   }

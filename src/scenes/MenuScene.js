@@ -1,4 +1,5 @@
 import { getClassCards } from "../systems/diabloModule.js";
+import { loadBestRun } from "../systems/progression.js";
 
 export default class MenuScene extends Phaser.Scene {
   constructor() {
@@ -8,6 +9,7 @@ export default class MenuScene extends Phaser.Scene {
   create() {
     const { width, height } = this.scale;
     const classCards = getClassCards();
+    const bestRun = loadBestRun();
     this.selectedClassId = this.registry.get("selectedClass") ?? classCards[0].id;
     this.add.rectangle(width / 2, height / 2, width, height, 0x0a0a1a);
 
@@ -24,6 +26,14 @@ export default class MenuScene extends Phaser.Scene {
       fontSize: "15px",
       color: "#aaaaaa"
     }).setOrigin(0.5);
+
+    if (bestRun) {
+      const bestText = `Melhor run: ${bestRun.score} pts | Lv ${bestRun.level} | ${bestRun.kills} kills`;
+      this.add.text(width / 2, height * 0.485, bestText, {
+        fontSize: "11px",
+        color: "#95a5a6"
+      }).setOrigin(0.5);
+    }
 
     const cardRegionTop = height * 0.5;
     const cardRegionBottom = height * 0.82;
@@ -94,7 +104,7 @@ export default class MenuScene extends Phaser.Scene {
       ease: "Sine.easeInOut"
     });
 
-    this.add.text(width / 2, height * 0.97, "v1.1 modulo diablo", {
+    this.add.text(width / 2, height * 0.97, "v1.4 combat polish", {
       fontSize: "11px",
       color: "#444"
     }).setOrigin(0.5);
