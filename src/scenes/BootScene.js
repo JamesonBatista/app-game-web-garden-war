@@ -17,6 +17,36 @@ export default class BootScene extends Phaser.Scene {
       text.setText(`Carregando... ${Math.floor(v * 100)}%`);
     });
 
+    this.load.spritesheet("asset-player-down", "assets/sprites/player/notlink_down.png", {
+      frameWidth: 16,
+      frameHeight: 16
+    });
+    this.load.spritesheet("asset-player-side", "assets/sprites/player/notlink_side.png", {
+      frameWidth: 16,
+      frameHeight: 16
+    });
+    this.load.spritesheet("asset-player-use", "assets/sprites/player/notlink_use.png", {
+      frameWidth: 16,
+      frameHeight: 16
+    });
+    this.load.spritesheet("asset-enemy-goo", "assets/sprites/enemies/goo_walk.png", {
+      frameWidth: 16,
+      frameHeight: 16
+    });
+    this.load.spritesheet("asset-enemy-sword", "assets/sprites/enemies/sword_beast_side.png", {
+      frameWidth: 16,
+      frameHeight: 16
+    });
+    this.load.spritesheet("asset-enemy-giant", "assets/sprites/enemies/giant_walk.png", {
+      frameWidth: 32,
+      frameHeight: 32
+    });
+    this.load.spritesheet("asset-fire", "assets/sprites/effects/whelp_fire.png", {
+      frameWidth: 32,
+      frameHeight: 32
+    });
+
+    // Legacy assets (fallback if present)
     this.load.spritesheet("asset-hero", "assets/sprites/player/hero_topdown.png", {
       frameWidth: 40,
       frameHeight: 64
@@ -51,8 +81,10 @@ export default class BootScene extends Phaser.Scene {
     this.makeIsoTile(g, "tile-dark", 0x2f5f38, 0x3f7d49);
     this.makeIsoTile(g, "tile-flower", 0x3a7d44, 0xe67e22, true);
 
-    if (this.textures.exists("asset-hero")) {
-      this.createHeroSheetsFromAsset();
+    if (this.textures.exists("asset-player-side") && this.textures.exists("asset-player-down") && this.textures.exists("asset-player-use")) {
+      this.createHeroSheetsFromPack();
+    } else if (this.textures.exists("asset-hero")) {
+      this.createHeroSheetsFromLegacyAsset();
     } else {
       this.makeHumanoidSheet(g, "warrior-idle", 64, 64, 4, "idle", {
         skin: 0xf1c27d,
@@ -77,13 +109,18 @@ export default class BootScene extends Phaser.Scene {
       });
     }
 
-    if (this.textures.exists("asset-slime")) {
+    if (this.textures.exists("asset-enemy-goo")) {
+      this.createSheetFromFramesCentered("asset-enemy-goo", "enemy-slime", [0, 1, 2, 3], 48, 48, 32, 32, 0, 8);
+    } else if (this.textures.exists("asset-slime")) {
       this.createSheetFromFramesCentered("asset-slime", "enemy-slime", [0, 1, 2, 1], 48, 48, 30, 30, 0, 10);
     } else {
       this.makeSlimeSheet(g, "enemy-slime", 48, 48, 4);
     }
 
-    if (this.textures.exists("asset-goblin")) {
+    if (this.textures.exists("asset-enemy-sword") && this.textures.exists("asset-enemy-giant")) {
+      this.createSheetFromFramesCentered("asset-enemy-sword", "enemy-goblin", [0, 1, 2, 3, 2, 1], 48, 48, 34, 34, 0, 10);
+      this.createSheetFromFramesCentered("asset-enemy-giant", "enemy-tank", [0, 1, 2, 3], 64, 64, 58, 58, 0, 4);
+    } else if (this.textures.exists("asset-goblin")) {
       this.createSheetFromFramesCentered("asset-goblin", "enemy-goblin", [1, 2, 3, 4, 5, 6], 48, 48, 34, 34, 0, 10);
       this.createSheetFromFramesCentered("asset-goblin", "enemy-tank", [24, 25, 26, 27], 64, 64, 52, 52, 0, 12);
     } else {
@@ -105,7 +142,13 @@ export default class BootScene extends Phaser.Scene {
     g.destroy();
   }
 
-  createHeroSheetsFromAsset() {
+  createHeroSheetsFromPack() {
+    this.createSheetFromFramesCentered("asset-player-down", "warrior-idle", [0, 1, 2, 1], 64, 64, 32, 32, 0, 8);
+    this.createSheetFromFramesCentered("asset-player-side", "warrior-walk", [0, 1, 2, 3, 2, 1, 0, 1], 64, 64, 32, 32, 0, 8);
+    this.createSheetFromFramesCentered("asset-player-use", "warrior-attack", [0, 1, 2, 3, 2, 1], 64, 64, 34, 34, 0, 6);
+  }
+
+  createHeroSheetsFromLegacyAsset() {
     this.createSheetFromFramesCentered("asset-hero", "warrior-idle", [0, 1, 2, 1], 64, 64, 40, 64, 0, 0);
     this.createSheetFromFramesCentered("asset-hero", "warrior-walk", [6, 7, 8, 9, 10, 11, 8, 7], 64, 64, 40, 64, 0, 0);
     this.createSheetFromFramesCentered("asset-hero", "warrior-attack", [12, 13, 14, 15, 16, 17], 64, 64, 40, 64, 0, 0);
@@ -355,5 +398,19 @@ export default class BootScene extends Phaser.Scene {
     createAnim("enemy-goblin", "enemy-goblin", 0, 5, 10, -1);
     createAnim("enemy-tank", "enemy-tank", 0, 3, 6, -1);
     createAnim("slash", "slash", 0, 4, 16, 0, true);
+
+    if (!anims.exists("fire-burst") && this.textures.exists("asset-fire")) {
+      const frameNames = this.textures.get("asset-fire").getFrameNames().filter((name) => name !== "__BASE");
+      const frames = frameNames.slice(0, Math.min(frameNames.length, 4)).map((name) => ({ key: "asset-fire", frame: name }));
+      if (frames.length) {
+        anims.create({
+          key: "fire-burst",
+          frames,
+          frameRate: 14,
+          repeat: 0,
+          hideOnComplete: true
+        });
+      }
+    }
   }
 }

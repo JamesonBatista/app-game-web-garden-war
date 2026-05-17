@@ -30,6 +30,7 @@ export default class GameScene extends Phaser.Scene {
     this.hasBossAlive = false;
     this.createIsoMap();
     this.createPlayer();
+    this.applyClassVisualStyle();
     this.createGroups();
     this.createCollisions();
     this.createCamera();
@@ -131,6 +132,45 @@ export default class GameScene extends Phaser.Scene {
     });
   }
 
+  applyClassVisualStyle() {
+    const classId = this.gs.player.classId;
+    this.skillVfx = {
+      primary: 0xf1c40f,
+      secondary: 0xe67e22,
+      trail: 0xf39c12
+    };
+
+    if (classId === "barbarian") {
+      this.player.setTint(0xffd6b3);
+      this.player.anims.timeScale = 0.95;
+      this.skillVfx = {
+        primary: 0xe67e22,
+        secondary: 0xc0392b,
+        trail: 0xf5b041
+      };
+      return;
+    }
+
+    if (classId === "sorcerer") {
+      this.player.setTint(0xc8d9ff);
+      this.player.anims.timeScale = 1.05;
+      this.skillVfx = {
+        primary: 0x5dade2,
+        secondary: 0xaf7ac5,
+        trail: 0x85c1e9
+      };
+      return;
+    }
+
+    this.player.setTint(0xd5f5e3);
+    this.player.anims.timeScale = 1.15;
+    this.skillVfx = {
+      primary: 0x58d68d,
+      secondary: 0x9b59b6,
+      trail: 0x82e0aa
+    };
+  }
+
   createGroups() {
     this.enemies = this.physics.add.group();
     this.gems = this.physics.add.group();
@@ -184,6 +224,9 @@ export default class GameScene extends Phaser.Scene {
       this.dealDamageToEnemy(enemy, bullet.damage ?? this.gs.player.damage * 0.7);
       if ((bullet.splashRadius ?? 0) > 0) {
         this.executeSplashDamage(enemy.x, enemy.y, bullet.splashRadius, (bullet.damage ?? 10) * 0.65);
+        if (bullet.isFireOrb) {
+          this.spawnFireImpact(enemy.x, enemy.y);
+        }
       }
       bullet.pierce = (bullet.pierce ?? 0) - 1;
       if (bullet.pierce < 0) {
@@ -354,12 +397,15 @@ export default class GameScene extends Phaser.Scene {
     const damage = this.gs.player.damage;
     const range = 80;
     const slash = this.add.sprite(this.player.x, this.player.y, "slash");
-    slash.setDepth(this.player.y + 1);
+    slash.setDepth(this.player.y + 1).setTint(this.skillVfx.primary);
     if (this.anims.exists("slash")) {
       slash.play("slash");
     } else {
       this.time.delayedCall(150, () => slash.destroy());
     }
+    this.spawnRadialBurst(this.player.x, this.player.y, this.skillVfx.secondary, 11, 85);
+    this.spawnPulseRing(this.player.x, this.player.y, 18, 76, this.skillVfx.primary, 0.4, 240);
+    this.cameras.main.shake(70, 0.004);
 
     this.enemies.getChildren().forEach((enemy) => {
       const d = Phaser.Math.Distance.Between(this.player.x, this.player.y, enemy.x, enemy.y);
@@ -374,16 +420,11 @@ export default class GameScene extends Phaser.Scene {
   executeAura() {
     const range = 100;
     const damage = 12;
-    const pulse = this.add.circle(this.player.x, this.player.y, 10, 0x9b59b6, 0.45);
-    pulse.setDepth(this.player.y - 1);
-    this.tweens.add({
-      targets: pulse,
-      radius: range,
-      alpha: 0,
-      duration: 350,
-      ease: "Cubic.Out",
-      onComplete: () => pulse.destroy()
+    this.spawnPulseRing(this.player.x, this.player.y, 10, range, this.skillVfx.secondary, 0.45, 350);
+    this.time.delayedCall(80, () => {
+      this.spawnPulseRing(this.player.x, this.player.y, 14, range + 14, this.skillVfx.primary, 0.25, 360);
     });
+    this.spawnRadialBurst(this.player.x, this.player.y, this.skillVfx.primary, 10, 95);
 
     this.enemies.getChildren().forEach((enemy) => {
       const d = Phaser.Math.Distance.Between(this.player.x, this.player.y, enemy.x, enemy.y);
@@ -406,7 +447,9 @@ export default class GameScene extends Phaser.Scene {
       bullet.damage = this.gs.player.damage * 0.7;
       bullet.pierce = 0;
       bullet.splashRadius = 0;
+      bullet.isFireOrb = false;
       bullet.lifespan = 1200;
+      bullet.trailColor = this.skillVfx.trail;
       bullet.setDepth(this.player.y);
     });
   }
@@ -414,6 +457,8 @@ export default class GameScene extends Phaser.Scene {
   executeFreeze() {
     const range = 160;
     this.cameras.main.flash(200, 50, 180, 255, false);
+    this.spawnPulseRing(this.player.x, this.player.y, 20, range, 0x7fb3d5, 0.4, 360);
+    this.spawnRadialBurst(this.player.x, this.player.y, 0xd6eaf8, 14, 140, 1.6);
     this.enemies.getChildren().forEach((enemy) => {
       const d = Phaser.Math.Distance.Between(this.player.x, this.player.y, enemy.x, enemy.y);
       if (d <= range) {
@@ -443,15 +488,10 @@ export default class GameScene extends Phaser.Scene {
   executeBarbarianEarthquake() {
     const range = 116;
     const damage = this.gs.player.damage * 1.8;
-    const quake = this.add.circle(this.player.x, this.player.y, 15, 0xe67e22, 0.45);
-    quake.setDepth(this.player.y - 1);
-    this.tweens.add({
-      targets: quake,
-      radius: range,
-      alpha: 0,
-      duration: 330,
-      onComplete: () => quake.destroy()
-    });
+    this.spawnPulseRing(this.player.x, this.player.y, 15, range, 0xe67e22, 0.45, 330);
+    this.spawnPulseRing(this.player.x, this.player.y, 8, range + 24, 0xc0392b, 0.24, 380);
+    this.spawnRadialBurst(this.player.x, this.player.y, 0xf5b041, 18, 130, 2.2);
+    this.cameras.main.shake(130, 0.009);
 
     this.enemies.getChildren().forEach((enemy) => {
       const d = Phaser.Math.Distance.Between(this.player.x, this.player.y, enemy.x, enemy.y);
@@ -483,6 +523,9 @@ export default class GameScene extends Phaser.Scene {
     orb.pierce = 0;
     orb.splashRadius = 72;
     orb.lifespan = 1500;
+    orb.trailColor = 0xffa726;
+    orb.isFireOrb = true;
+    this.spawnPulseRing(this.player.x, this.player.y, 6, 26, 0xffa726, 0.4, 180);
   }
 
   executeRogueShadowVolley() {
@@ -503,8 +546,11 @@ export default class GameScene extends Phaser.Scene {
       bullet.damage = this.gs.player.damage * 1.15;
       bullet.pierce = 1;
       bullet.splashRadius = 0;
+      bullet.isFireOrb = false;
       bullet.lifespan = 1100;
+      bullet.trailColor = 0xc39bd3;
     });
+    this.spawnRadialBurst(this.player.x, this.player.y, 0x9b59b6, 8, 70);
   }
 
   spawnEnemy() {
@@ -598,19 +644,14 @@ export default class GameScene extends Phaser.Scene {
     bullet.damage = enemy.damage;
     bullet.pierce = 0;
     bullet.splashRadius = 0;
+    bullet.isFireOrb = false;
     bullet.lifespan = 2200;
+    bullet.trailColor = 0xe74c3c;
   }
 
   executeSplashDamage(x, y, radius, damage) {
-    const splash = this.add.circle(x, y, 10, 0xf39c12, 0.4);
-    splash.setDepth(y + 1);
-    this.tweens.add({
-      targets: splash,
-      radius,
-      alpha: 0,
-      duration: 180,
-      onComplete: () => splash.destroy()
-    });
+    this.spawnPulseRing(x, y, 10, radius, 0xf39c12, 0.4, 180);
+    this.spawnRadialBurst(x, y, 0xf5cba7, 10, radius * 0.7);
 
     this.enemies.getChildren().forEach((other) => {
       const dist = Phaser.Math.Distance.Between(x, y, other.x, other.y);
@@ -648,6 +689,49 @@ export default class GameScene extends Phaser.Scene {
     });
   }
 
+  spawnPulseRing(x, y, startRadius, endRadius, color, alpha, duration) {
+    const ring = this.add.circle(x, y, startRadius, color, alpha);
+    ring.setDepth(y + 2);
+    this.tweens.add({
+      targets: ring,
+      radius: endRadius,
+      alpha: 0,
+      duration,
+      ease: "Cubic.Out",
+      onComplete: () => ring.destroy()
+    });
+  }
+
+  spawnRadialBurst(x, y, color, count, speed, size = 2.2) {
+    for (let i = 0; i < count; i += 1) {
+      const angle = (Math.PI * 2 * i) / count + Phaser.Math.FloatBetween(-0.08, 0.08);
+      const px = x + Math.cos(angle) * 8;
+      const py = y + Math.sin(angle) * 8;
+      const spark = this.add.circle(px, py, Phaser.Math.FloatBetween(size * 0.6, size), color, 0.95);
+      spark.setDepth(y + 3);
+      this.tweens.add({
+        targets: spark,
+        x: x + Math.cos(angle) * speed,
+        y: y + Math.sin(angle) * speed,
+        alpha: 0,
+        duration: Phaser.Math.Between(180, 300),
+        onComplete: () => spark.destroy()
+      });
+    }
+  }
+
+  spawnFireImpact(x, y) {
+    if (this.anims.exists("fire-burst")) {
+      const fire = this.add.sprite(x, y, "asset-fire");
+      fire.setDepth(y + 4).setScale(1.6).setTint(0xffb347);
+      fire.play("fire-burst");
+      return;
+    }
+
+    this.spawnPulseRing(x, y, 6, 34, 0xff8c00, 0.45, 180);
+    this.spawnRadialBurst(x, y, 0xffc266, 10, 48, 2.5);
+  }
+
   dealDamageToEnemy(enemy, damage) {
     const critResult = rollCriticalDamage(damage, this.gs.player);
     enemy.hp -= critResult.amount;
@@ -659,6 +743,9 @@ export default class GameScene extends Phaser.Scene {
     });
     if (critResult.isCritical) {
       this.spawnFloatingText(enemy.x, enemy.y - 20, "CRIT", 0xf1c40f);
+      this.spawnRadialBurst(enemy.x, enemy.y - 2, 0xf1c40f, 8, 45);
+    } else {
+      this.spawnRadialBurst(enemy.x, enemy.y - 1, this.skillVfx.primary, 5, 28, 1.6);
     }
     this.onSuccessfulHit();
 
@@ -962,6 +1049,21 @@ export default class GameScene extends Phaser.Scene {
     const updateGroup = (group) => {
       group.getChildren().forEach((bullet) => {
         bullet.lifespan = (bullet.lifespan ?? 0) - delta;
+        bullet.trailElapsed = (bullet.trailElapsed ?? 0) + delta;
+        if (bullet.trailElapsed > 36 && bullet.active) {
+          bullet.trailElapsed = 0;
+          const color = bullet.trailColor ?? (group === this.enemyBullets ? 0xe74c3c : this.skillVfx.trail);
+          const dot = this.add.circle(bullet.x, bullet.y, 2.4, color, 0.55);
+          dot.setDepth(bullet.y - 1);
+          this.tweens.add({
+            targets: dot,
+            alpha: 0,
+            scaleX: 0.2,
+            scaleY: 0.2,
+            duration: 200,
+            onComplete: () => dot.destroy()
+          });
+        }
         if (bullet.lifespan <= 0) {
           bullet.destroy();
         }

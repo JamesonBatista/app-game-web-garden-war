@@ -11,6 +11,7 @@ Agora com um modulo ARPG estilo Diablo:
 - drops de itens no chao com clique/toque para equipar
 - painel de equipamento (arma, armadura, reliquia)
 - inimigos elite e mini-boss com afixos perigosos
+- VFX reforcado nas habilidades (impacto, trilha, anel de energia, explosao)
 
 ## Dependencias em runtime
 
@@ -21,9 +22,17 @@ Agora com um modulo ARPG estilo Diablo:
 
 O jogo usa sprites locais em `assets/sprites/` para player e inimigos, com fallback interno caso algum arquivo nao carregue.
 
-- `assets/sprites/player/hero_topdown.png` (OpenGameArt - Hero character sprite sheet)
-- `assets/sprites/enemies/goblin_sheet.png` (OpenGameArt - Goblin monster)
-- `assets/sprites/enemies/slime_sheet.png` (OpenGameArt - Slime Animations)
+Pack principal consistente:
+
+- `assets/sprites/player/notlink_down.png`
+- `assets/sprites/player/notlink_side.png`
+- `assets/sprites/player/notlink_use.png`
+- `assets/sprites/enemies/sword_beast_side.png`
+- `assets/sprites/enemies/goo_walk.png`
+- `assets/sprites/enemies/giant_walk.png`
+- `assets/sprites/effects/whelp_fire.png`
+
+Creditos completos em `assets/CREDITS.md`.
 
 ## Estrutura
 
