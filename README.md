@@ -12,11 +12,19 @@ Agora com um modulo ARPG estilo Diablo:
 - painel de equipamento (arma, armadura, reliquia)
 - inimigos elite e mini-boss com afixos perigosos
 
+## Dependencias em runtime
+
+- Phaser 3.60.0 versionado localmente em `vendor/phaser/phaser.min.js`
+- Nenhuma dependencia externa via CDN para executar o jogo
+
 ## Estrutura
 
 ```text
 .
 ├── index.html
+├── vendor/
+│   └── phaser/
+│       └── phaser.min.js
 ├── styles/
 │   └── main.css
 └── src/
