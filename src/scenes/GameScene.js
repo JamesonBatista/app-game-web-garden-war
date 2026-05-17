@@ -101,12 +101,12 @@ export default class GameScene extends Phaser.Scene {
     this.player = this.physics.add.sprite(0, 0, "warrior-idle");
     this.player.body.setSize(28, 20);
     this.player.body.setOffset(18, 40);
-    this.player.play("warrior-idle");
+    this.safePlay(this.player, "warrior-idle");
     this.playerMoving = false;
 
     this.player.on("animationcomplete-warrior-attack", () => {
       const moving = this.player.body.speed > 5;
-      this.player.play(moving ? "warrior-walk" : "warrior-idle");
+      this.safePlay(this.player, moving ? "warrior-walk" : "warrior-idle");
     });
   }
 
@@ -161,6 +161,9 @@ export default class GameScene extends Phaser.Scene {
 
   createKeyboard() {
     const keyboard = this.input.keyboard;
+    if (!keyboard) {
+      return;
+    }
     this.keyUp = keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.UP);
     this.keyDown = keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.DOWN);
     this.keyLeft = keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.LEFT);
@@ -226,10 +229,10 @@ export default class GameScene extends Phaser.Scene {
     let vx = 0;
     let vy = 0;
 
-    if (this.keyLeft.isDown || this.keyA.isDown) vx -= 1;
-    if (this.keyRight.isDown || this.keyD.isDown) vx += 1;
-    if (this.keyUp.isDown || this.keyW.isDown) vy -= 1;
-    if (this.keyDown.isDown || this.keyS.isDown) vy += 1;
+    if (this.keyLeft?.isDown || this.keyA?.isDown) vx -= 1;
+    if (this.keyRight?.isDown || this.keyD?.isDown) vx += 1;
+    if (this.keyUp?.isDown || this.keyW?.isDown) vy -= 1;
+    if (this.keyDown?.isDown || this.keyS?.isDown) vy += 1;
 
     if (this.joystickActive) {
       vx = this.joystickDX;
@@ -252,7 +255,7 @@ export default class GameScene extends Phaser.Scene {
     if (cur !== "warrior-attack") {
       const next = this.playerMoving ? "warrior-walk" : "warrior-idle";
       if (cur !== next) {
-        this.player.play(next);
+        this.safePlay(this.player, next);
       }
     }
   }
@@ -306,7 +309,12 @@ export default class GameScene extends Phaser.Scene {
     const damage = this.gs.player.damage;
     const range = 80;
     const slash = this.add.sprite(this.player.x, this.player.y, "slash");
-    slash.setDepth(this.player.y + 1).play("slash");
+    slash.setDepth(this.player.y + 1);
+    if (this.anims.exists("slash")) {
+      slash.play("slash");
+    } else {
+      this.time.delayedCall(150, () => slash.destroy());
+    }
 
     this.enemies.getChildren().forEach((enemy) => {
       const d = Phaser.Math.Distance.Between(this.player.x, this.player.y, enemy.x, enemy.y);
@@ -315,7 +323,7 @@ export default class GameScene extends Phaser.Scene {
       }
     });
 
-    this.player.play("warrior-attack");
+    this.safePlay(this.player, "warrior-attack");
   }
 
   executeAura() {
@@ -381,7 +389,7 @@ export default class GameScene extends Phaser.Scene {
     const y = this.player.y + Math.sin(angle) * dist;
 
     const enemy = this.enemies.create(x, y, cfg.anim);
-    enemy.play(cfg.anim);
+    this.safePlay(enemy, cfg.anim);
     enemy.setScale(cfg.scale);
     enemy.body.setSize(cfg.bodyW, cfg.bodyH);
     enemy.body.setOffset(cfg.bodyOffsetX, cfg.bodyOffsetY);
@@ -663,5 +671,11 @@ export default class GameScene extends Phaser.Scene {
 
   startBGM() {
     this.bgmEnabled = true;
+  }
+
+  safePlay(sprite, key) {
+    if (this.anims.exists(key)) {
+      sprite.play(key);
+    }
   }
 }

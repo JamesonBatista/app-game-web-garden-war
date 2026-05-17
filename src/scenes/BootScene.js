@@ -93,52 +93,47 @@ export default class BootScene extends Phaser.Scene {
     }
 
     g.generateTexture(key, width, height);
+
+    // Registra frames manualmente para o texture gerado funcionar como spritesheet.
+    const texture = this.textures.get(key);
+    for (let i = 0; i < frames; i += 1) {
+      const frameName = String(i);
+      if (!texture.has(frameName)) {
+        texture.add(frameName, 0, i * frameW, 0, frameW, frameH);
+      }
+    }
   }
 
   createAnimations() {
     const anims = this.anims;
-    anims.create({
-      key: "warrior-idle",
-      frames: anims.generateFrameNumbers("warrior-idle", { start: 0, end: 3 }),
-      frameRate: 6,
-      repeat: -1
-    });
-    anims.create({
-      key: "warrior-walk",
-      frames: anims.generateFrameNumbers("warrior-walk", { start: 0, end: 7 }),
-      frameRate: 10,
-      repeat: -1
-    });
-    anims.create({
-      key: "warrior-attack",
-      frames: anims.generateFrameNumbers("warrior-attack", { start: 0, end: 5 }),
-      frameRate: 14,
-      repeat: 0
-    });
-    anims.create({
-      key: "enemy-slime",
-      frames: anims.generateFrameNumbers("enemy-slime", { start: 0, end: 3 }),
-      frameRate: 8,
-      repeat: -1
-    });
-    anims.create({
-      key: "enemy-goblin",
-      frames: anims.generateFrameNumbers("enemy-goblin", { start: 0, end: 5 }),
-      frameRate: 10,
-      repeat: -1
-    });
-    anims.create({
-      key: "enemy-tank",
-      frames: anims.generateFrameNumbers("enemy-tank", { start: 0, end: 3 }),
-      frameRate: 6,
-      repeat: -1
-    });
-    anims.create({
-      key: "slash",
-      frames: anims.generateFrameNumbers("slash", { start: 0, end: 4 }),
-      frameRate: 16,
-      repeat: 0,
-      hideOnComplete: true
-    });
+
+    const createAnim = (key, texture, start, end, frameRate, repeat, hideOnComplete = false) => {
+      if (anims.exists(key) || !this.textures.exists(texture)) {
+        return;
+      }
+      const frames = anims.generateFrameNames(texture, {
+        start,
+        end
+      });
+      if (!frames.length) {
+        return;
+      }
+
+      anims.create({
+        key,
+        frames,
+        frameRate,
+        repeat,
+        hideOnComplete
+      });
+    };
+
+    createAnim("warrior-idle", "warrior-idle", 0, 3, 6, -1);
+    createAnim("warrior-walk", "warrior-walk", 0, 7, 10, -1);
+    createAnim("warrior-attack", "warrior-attack", 0, 5, 14, 0);
+    createAnim("enemy-slime", "enemy-slime", 0, 3, 8, -1);
+    createAnim("enemy-goblin", "enemy-goblin", 0, 5, 10, -1);
+    createAnim("enemy-tank", "enemy-tank", 0, 3, 6, -1);
+    createAnim("slash", "slash", 0, 4, 16, 0, true);
   }
 }
